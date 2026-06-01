@@ -217,22 +217,39 @@ export type PendingBattleChoice =
       selectableHandCardIds: string[];
     };
 
-export type QueuedNextAttackEffect = {
-  kind: 'other_leader_damage';
-  sourceCardName: string;
-  sourceText: string;
-  damageAmount: number;
-};
+export type QueuedNextAttackEffect =
+  | {
+      kind: 'other_leader_damage';
+      sourceCardName: string;
+      sourceText: string;
+      damageAmount: number;
+    }
+  | {
+      kind: 'all_other_leader_damage';
+      sourceCardName: string;
+      sourceText: string;
+      damageAmount: number;
+    };
 
-export type QueuedPostAttackEffect = {
-  kind: 'other_leader_damage';
-  sourceCardName: string;
-  sourceText: string;
-  damageAmount: number;
-  attackerLeaderId: string;
-  attackedLeaderId: string;
-  targetColor?: string;
-};
+export type QueuedPostAttackEffect =
+  | {
+      kind: 'other_leader_damage';
+      sourceCardName: string;
+      sourceText: string;
+      damageAmount: number;
+      attackerLeaderId: string;
+      attackedLeaderId: string;
+      targetColor?: string;
+    }
+  | {
+      kind: 'all_other_leader_damage';
+      sourceCardName: string;
+      sourceText: string;
+      damageAmount: number;
+      attackerLeaderId: string;
+      attackedLeaderId: string;
+      targetColor?: string;
+    };
 
 export type Leader = {
   id: string;

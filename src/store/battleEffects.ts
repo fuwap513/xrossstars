@@ -273,6 +273,22 @@ const flushQueuedPostAttackEffects = (state: MatchState, deps: RuntimeDeps) => {
   while (state.postAttackEffectQueue.length > 0) {
     const effect = state.postAttackEffectQueue.shift();
     if (!effect) return false;
+
+    if (effect.kind === 'all_other_leader_damage') {
+      const inflicted = applyDamageToAllOtherOpponents(
+        state,
+        effect.damageAmount,
+        deps,
+        effect.attackedLeaderId,
+      );
+      if (inflicted) {
+        deps.log(`${effect.sourceCardName}: アタック後に相手の他のリーダーすべてへ ${effect.damageAmount} ダメージ`);
+      } else {
+        deps.log(`${effect.sourceCardName}: ダメージを与えられる他のリーダーがいません`);
+      }
+      continue;
+    }
+
     if (effect.kind === 'other_leader_damage') {
       const selectableLeaderIds = state.opponent.leaders
         .filter((leader) => !leader.isDown && leader.id !== effect.attackedLeaderId)

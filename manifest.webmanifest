@@ -1,0 +1,30 @@
+{
+  "id": "/",
+  "name": "Xross Stars 検証アプリ",
+  "short_name": "Xross Stars",
+  "description": "Xross Stars の一人回し、対戦検証、デッキ調整をまとめて行える検証アプリ",
+  "lang": "ja",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#11151b",
+  "theme_color": "#11151b",
+  "orientation": "portrait",
+  "categories": ["games", "utilities", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

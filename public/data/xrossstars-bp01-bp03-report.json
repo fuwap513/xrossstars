@@ -1,0 +1,23 @@
+{
+  "total_urls": 367,
+  "scraped_cards": 367,
+  "errors": [],
+  "by_set": {
+    "BP01": 140,
+    "BP02": 112,
+    "BP03": 115
+  },
+  "by_type": {
+    "leader": 126,
+    "attack": 104,
+    "memoria": 104,
+    "tactics": 26,
+    "pp": 7
+  },
+  "by_deckGroup": {
+    "leader": 126,
+    "main": 208,
+    "tactics": 26,
+    "other": 7
+  }
+}

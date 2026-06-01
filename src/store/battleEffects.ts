@@ -798,25 +798,46 @@ const resolveNonAttackCardEffect = (state: MatchState, card: Card, deps: Runtime
   }
 
   const nextAttackBuffMatches = [...text.matchAll(/次のアタックのダメージ\+(\d+)/g)];
-  if (nextAttackBuffMatches.length > 0) {
-    nextAttackBuffMatches.forEach((matched) => {
-      const amount = Number(matched[1]);
-      if (!Number.isNaN(amount)) state.nextAttackBuff += amount;
-    });
-    const nextAttackPostEffectMatch = text.match(/【アタック後】対戦相手の他のリーダー1体に(\d+)ダメージ/);
-    if (nextAttackPostEffectMatch) {
-      const damageAmount = Number(nextAttackPostEffectMatch[1]);
-      if (!Number.isNaN(damageAmount)) {
-        state.nextAttackEffectQueue.push({
-          kind: 'other_leader_damage',
-          sourceCardName: card.name,
-          sourceText: card.text,
-          damageAmount,
-        });
-      }
+if (nextAttackBuffMatches.length > 0) {
+  nextAttackBuffMatches.forEach((matched) => {
+    const amount = Number(matched[1]);
+    if (!Number.isNaN(amount)) state.nextAttackBuff += amount;
+  });
+
+  const nextAttackSinglePostEffectMatch = text.match(
+    /【アタック後】対戦相手の他のリーダー1体に(\d+)ダメージ/,
+  );
+  if (nextAttackSinglePostEffectMatch) {
+    const damageAmount = Number(nextAttackSinglePostEffectMatch[1]);
+    if (!Number.isNaN(damageAmount)) {
+      state.nextAttackEffectQueue.push({
+        kind: 'other_leader_damage',
+        sourceCardName: card.name,
+        sourceText: card.text,
+        damageAmount,
+      });
+      deps.log(`${card.name}: アタック後に相手の他のリーダー1体へ ${damageAmount} ダメージを予約`);
     }
-    deps.log(`${card.name}: 次のアタック強化を適用`);
   }
+
+  const nextAttackAllPostEffectMatch = text.match(
+    /【アタック後】対戦相手の他のリーダーすべてに(\d+)ダメージ/,
+  );
+  if (nextAttackAllPostEffectMatch) {
+    const damageAmount = Number(nextAttackAllPostEffectMatch[1]);
+    if (!Number.isNaN(damageAmount)) {
+      state.nextAttackEffectQueue.push({
+        kind: 'all_other_leader_damage',
+        sourceCardName: card.name,
+        sourceText: card.text,
+        damageAmount,
+      });
+      deps.log(`${card.name}: アタック後に相手の他のリーダーすべてへ ${damageAmount} ダメージを予約`);
+    }
+  }
+
+  deps.log(`${card.name}: 次のアタック強化を適用`);
+}
   if (text.includes('【ラウンド中】このラウンド、自分のリーダーすべての攻撃力を+10する')) {
     state.roundAttackBuff += 10;
     deps.log(`${card.name}: このラウンドのアタック +10`);
@@ -918,18 +939,30 @@ const resolveAttackCard = (state: MatchState, card: Card, deps: RuntimeDeps, opt
     state.nextAttackEffectQueue = [];
     runPostAttackEffects(state, card, context, deps);
     queuedNextAttackEffects.forEach((effect) => {
-      if (effect.kind === 'other_leader_damage') {
-        state.postAttackEffectQueue.push({
-          kind: 'other_leader_damage',
-          sourceCardName: effect.sourceCardName,
-          sourceText: effect.sourceText,
-          damageAmount: effect.damageAmount,
-          attackerLeaderId: attacker.id,
-          attackedLeaderId: context.targetId,
-          targetColor: context.targetColor,
-        });
-      }
+  if (effect.kind === 'other_leader_damage') {
+    state.postAttackEffectQueue.push({
+      kind: 'other_leader_damage',
+      sourceCardName: effect.sourceCardName,
+      sourceText: effect.sourceText,
+      damageAmount: effect.damageAmount,
+      attackerLeaderId: attacker.id,
+      attackedLeaderId: context.targetId,
+      targetColor: context.targetColor,
     });
+  }
+
+  if (effect.kind === 'all_other_leader_damage') {
+    state.postAttackEffectQueue.push({
+      kind: 'all_other_leader_damage',
+      sourceCardName: effect.sourceCardName,
+      sourceText: effect.sourceText,
+      damageAmount: effect.damageAmount,
+      attackerLeaderId: attacker.id,
+      attackedLeaderId: context.targetId,
+      targetColor: context.targetColor,
+    });
+  }
+});
     applyEquipmentTriggeredEffects(state, context, deps);
     flushQueuedPostAttackEffects(state, deps);
   }

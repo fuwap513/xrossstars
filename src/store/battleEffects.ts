@@ -70,17 +70,32 @@ export const getEquipmentBuff = (board: PlayerBoard, leaderId?: string) => getEq
 
 export const getLeaderHp = (leader: Leader) => leader.baseHp + (leader.awakened ? 30 : 0);
 
-export const createLeaderFromCatalog = (entry: LeaderSetupEntry, cardCatalog: RegisteredCard[]): Leader => {
-  const matchedLeader = cardCatalog.find((card) => card.type === 'leader' && card.name === entry.name.trim());
+export const createLeaderFromCatalog = (
+  entry: LeaderSetupEntry,
+  cardCatalog: RegisteredCard[],
+): Leader => {
+  const matchedById = entry.sourceCardId
+    ? cardCatalog.find((card) => card.type === 'leader' && card.id === entry.sourceCardId)
+    : undefined;
+
+  const matchedByName = cardCatalog.find(
+    (card) => card.type === 'leader' && card.name.trim() === entry.name.trim(),
+  );
+
+  const matchedLeader = matchedById ?? matchedByName;
+
+  const fallbackBaseAtk = 30;
+  const fallbackBaseHp = entry.baseHp;
+
   return {
     id: entry.id,
-    name: entry.name,
-    baseAtk: parseIntSafe(matchedLeader?.baseAtk) ?? 30,
-    baseHp: entry.baseHp,
+    name: matchedLeader?.name ?? entry.name,
+    baseAtk: parseIntSafe(matchedLeader?.baseAtk) ?? fallbackBaseAtk,
+    baseHp: parseIntSafe(matchedLeader?.baseHp) ?? fallbackBaseHp,
     awakened: false,
     currentDamage: 0,
     isDown: false,
-    sourceCardId: matchedLeader?.id,
+    sourceCardId: matchedLeader?.id ?? entry.sourceCardId,
     effectText: matchedLeader?.text,
     color: matchedLeader?.color,
     rarity: matchedLeader?.rarity,

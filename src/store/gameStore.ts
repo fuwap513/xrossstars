@@ -111,16 +111,16 @@ const sanitizeUsageStats = (value: unknown): AppUsageStats => (
 
 const DEFAULT_LEADER_SETUP: LeaderSetup = {
   self: [
-    { id: 's1', name: 'Leader 1', baseHp: 110 },
-    { id: 's2', name: 'Leader 2', baseHp: 110 },
-    { id: 's3', name: 'Leader 3', baseHp: 100 },
-    { id: 's4', name: 'Leader 4', baseHp: 110 },
+    { id: 's1', name: 'Leader 1', baseHp: 110, sourceCardId: undefined },
+    { id: 's2', name: 'Leader 2', baseHp: 110, sourceCardId: undefined },
+    { id: 's3', name: 'Leader 3', baseHp: 100, sourceCardId: undefined },
+    { id: 's4', name: 'Leader 4', baseHp: 110, sourceCardId: undefined },
   ],
   opponent: [
-    { id: 'o1', name: 'Enemy 1', baseHp: 110 },
-    { id: 'o2', name: 'Enemy 2', baseHp: 110 },
-    { id: 'o3', name: 'Enemy 3', baseHp: 110 },
-    { id: 'o4', name: 'Enemy 4', baseHp: 110 },
+    { id: 'o1', name: 'Enemy 1', baseHp: 110, sourceCardId: undefined },
+    { id: 'o2', name: 'Enemy 2', baseHp: 110, sourceCardId: undefined },
+    { id: 'o3', name: 'Enemy 3', baseHp: 110, sourceCardId: undefined },
+    { id: 'o4', name: 'Enemy 4', baseHp: 110, sourceCardId: undefined },
   ],
 };
 
@@ -144,6 +144,7 @@ const isLeaderSetupEntryShape = (value: unknown): value is LeaderSetupEntry => (
   && typeof value.name === 'string'
   && typeof value.baseHp === 'number'
   && Number.isFinite(value.baseHp)
+  && (typeof value.sourceCardId === 'undefined' || typeof value.sourceCardId === 'string')
 );
 
 const sanitizeLeaderSetup = (value: unknown): LeaderSetup => {
@@ -160,6 +161,7 @@ const sanitizeLeaderSetup = (value: unknown): LeaderSetup => {
       id: defaultEntry.id,
       name: safeName.slice(0, 24),
       baseHp: safeHp || defaults[index].baseHp,
+      sourceCardId: typeof candidate.sourceCardId === 'string' && candidate.sourceCardId.trim() ? candidate.sourceCardId.trim() : undefined,
     };
   });
 
@@ -225,10 +227,17 @@ const isDeckConfigValid = (config: DeckConfig, cardCatalog: RegisteredCard[]) =>
   return getMainDeckTotal(normalized) === 50 && getTacticsDeckTotal(normalized) === 5;
 };
 
-const createLeader = (id: string, name: string, baseHp: number, cardCatalog: RegisteredCard[]): Leader => createLeaderFromCatalog({
+const createLeader = (
+  id: string,
+  name: string,
+  baseHp: number,
+  cardCatalog: RegisteredCard[],
+  sourceCardId?: string,
+): Leader => createLeaderFromCatalog({
   id,
   name,
   baseHp,
+  sourceCardId,
 }, cardCatalog);
 
 const createPpTicketCard = (cardCatalog: RegisteredCard[], serial: number): Card => {
@@ -457,7 +466,7 @@ const createInitialState = (config: DeckConfig, cardCatalog: RegisteredCard[], f
     pendingChoice: undefined,
     self: {
       name: '自分',
-      leaders: leaderSetup.self.map((leader) => createLeader(leader.id, leader.name, leader.baseHp, cardCatalog)),
+      leaders: leaderSetup.self.map((leader) => createLeader(leader.id, leader.name, leader.baseHp, cardCatalog, leader.sourceCardId)),
       hand,
       mainDeck,
       trash: [],
@@ -469,7 +478,7 @@ const createInitialState = (config: DeckConfig, cardCatalog: RegisteredCard[], f
     },
     opponent: {
       name: '相手',
-      leaders: leaderSetup.opponent.map((leader) => createLeader(leader.id, leader.name, leader.baseHp, cardCatalog)),
+      leaders: leaderSetup.opponent.map((leader) => createLeader(leader.id, leader.name, leader.baseHp, cardCatalog, leader.sourceCardId)),
       hand: [],
       mainDeck: [],
       trash: [],
@@ -818,72 +827,71 @@ export const useGameStore = create<GameStore>()(
         };
       }),
       updateLeaderSetup: (side, leaderId, patch) => set((store) => {
-  const nextLeaderSetup = clone(store.leaderSetup);
-  const leaderIndex = nextLeaderSetup[side].findIndex((leader) => leader.id === leaderId);
-  if (leaderIndex < 0) {
-    return { leaderSetup: store.leaderSetup };
-  }
+        const nextLeaderSetup = clone(store.leaderSetup);
+        const leaderIndex = nextLeaderSetup[side].findIndex((leader) => leader.id === leaderId);
+        if (leaderIndex < 0) {
+          return { leaderSetup: store.leaderSetup };
+        }
 
-  const currentLeader = nextLeaderSetup[side][leaderIndex];
+        const currentLeader = nextLeaderSetup[side][leaderIndex];
 
-  let nextSourceCardId =
-    typeof patch.sourceCardId === 'string'
-      ? (patch.sourceCardId.trim() || undefined)
-      : currentLeader.sourceCardId;
+        let nextSourceCardId =
+          typeof patch.sourceCardId === 'string'
+            ? (patch.sourceCardId.trim() || undefined)
+            : currentLeader.sourceCardId;
 
-  let nextName =
-    typeof patch.name === 'string'
-      ? patch.name.trim().slice(0, 24) || currentLeader.name
-      : currentLeader.name;
+        let nextName =
+          typeof patch.name === 'string'
+            ? patch.name.trim().slice(0, 24) || currentLeader.name
+            : currentLeader.name;
 
-  let nextHp =
-    typeof patch.baseHp === 'number' && Number.isFinite(patch.baseHp)
-      ? Math.min(200, Math.max(50, Math.round(patch.baseHp / 10) * 10))
-      : currentLeader.baseHp;
+        let nextHp =
+          typeof patch.baseHp === 'number' && Number.isFinite(patch.baseHp)
+            ? Math.min(200, Math.max(50, Math.round(patch.baseHp / 10) * 10))
+            : currentLeader.baseHp;
 
-  // 公式カードが選ばれている場合は、そのカード情報を優先反映
-  if (nextSourceCardId) {
-    const selectedCard = store.cardCatalog.find(
-      (card) => card.type === 'leader' && card.id === nextSourceCardId,
-    );
+        if (nextSourceCardId) {
+          const selectedCard = store.cardCatalog.find(
+            (card) => card.type === 'leader' && card.id === nextSourceCardId,
+          );
 
-    if (selectedCard) {
-      nextName = selectedCard.name;
-      const matchedHp = selectedCard.baseHp?.match(/\d+/);
-      if (matchedHp) {
-        nextHp = Math.min(200, Math.max(50, Math.round(Number(matchedHp[0]) / 10) * 10));
-      }
-    }
-  }
+          if (selectedCard) {
+            nextName = selectedCard.name;
+            const matchedHp = selectedCard.baseHp?.match(/\d+/);
+            if (matchedHp) {
+              nextHp = Math.min(200, Math.max(50, Math.round(Number(matchedHp[0]) / 10) * 10));
+            }
+          }
+        }
 
-  if (
-    currentLeader.name === nextName &&
-    currentLeader.baseHp === nextHp &&
-    currentLeader.sourceCardId === nextSourceCardId
-  ) {
-    return { leaderSetup: store.leaderSetup };
-  }
+        if (
+          currentLeader.name === nextName
+          && currentLeader.baseHp === nextHp
+          && currentLeader.sourceCardId === nextSourceCardId
+        ) {
+          return { leaderSetup: store.leaderSetup };
+        }
 
-  nextLeaderSetup[side][leaderIndex] = {
-    ...currentLeader,
-    name: nextName,
-    baseHp: nextHp,
-    sourceCardId: nextSourceCardId,
-  };
+        nextLeaderSetup[side][leaderIndex] = {
+          ...currentLeader,
+          name: nextName,
+          baseHp: nextHp,
+          sourceCardId: nextSourceCardId,
+        };
 
-  const sideLabel = side === 'self' ? '自分側' : '相手側';
+        const sideLabel = side === 'self' ? '自分側' : '相手側';
 
-  return {
-    leaderSetup: nextLeaderSetup,
-    operationLogs: appendOperationLog(
-      store.operationLogs,
-      `${sideLabel}リーダー設定を更新しました: ${currentLeader.name} → ${nextName} / HP ${nextHp}${
-        nextSourceCardId ? ` / CARD ${nextSourceCardId}` : ''
-      }`,
-      'deck',
-    ),
-  };
-}),
+        return {
+          leaderSetup: nextLeaderSetup,
+          operationLogs: appendOperationLog(
+            store.operationLogs,
+            `${sideLabel}リーダー設定を更新しました: ${currentLeader.name} → ${nextName} / HP ${nextHp}${
+              nextSourceCardId ? ` / CARD ${nextSourceCardId}` : ''
+            }`,
+            'deck',
+          ),
+        };
+      }),
       resetLeaderSetup: () => set((store) => ({
         leaderSetup: clone(DEFAULT_LEADER_SETUP),
         operationLogs: appendOperationLog(store.operationLogs, 'リーダー設定を推奨初期値に戻しました', 'deck'),

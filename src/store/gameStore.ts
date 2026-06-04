@@ -818,27 +818,72 @@ export const useGameStore = create<GameStore>()(
         };
       }),
       updateLeaderSetup: (side, leaderId, patch) => set((store) => {
-        const nextLeaderSetup = clone(store.leaderSetup);
-        const leaderIndex = nextLeaderSetup[side].findIndex((leader) => leader.id === leaderId);
-        if (leaderIndex < 0) return { leaderSetup: store.leaderSetup };
+  const nextLeaderSetup = clone(store.leaderSetup);
+  const leaderIndex = nextLeaderSetup[side].findIndex((leader) => leader.id === leaderId);
+  if (leaderIndex < 0) {
+    return { leaderSetup: store.leaderSetup };
+  }
 
-        const currentLeader = nextLeaderSetup[side][leaderIndex];
-        const nextName = typeof patch.name === 'string' ? patch.name.trim().slice(0, 24) || currentLeader.name : currentLeader.name;
-        const nextHp = typeof patch.baseHp === 'number' && Number.isFinite(patch.baseHp)
-          ? Math.min(200, Math.max(50, Math.round(patch.baseHp / 10) * 10))
-          : currentLeader.baseHp;
+  const currentLeader = nextLeaderSetup[side][leaderIndex];
 
-        if (currentLeader.name === nextName && currentLeader.baseHp === nextHp) {
-          return { leaderSetup: store.leaderSetup };
-        }
+  let nextSourceCardId =
+    typeof patch.sourceCardId === 'string'
+      ? (patch.sourceCardId.trim() || undefined)
+      : currentLeader.sourceCardId;
 
-        nextLeaderSetup[side][leaderIndex] = { ...currentLeader, name: nextName, baseHp: nextHp };
-        const sideLabel = side === 'self' ? '自分側' : '相手側';
-        return {
-          leaderSetup: nextLeaderSetup,
-          operationLogs: appendOperationLog(store.operationLogs, `${sideLabel}リーダー設定を更新しました: ${currentLeader.name} → ${nextName} / HP ${nextHp}`, 'deck'),
-        };
-      }),
+  let nextName =
+    typeof patch.name === 'string'
+      ? patch.name.trim().slice(0, 24) || currentLeader.name
+      : currentLeader.name;
+
+  let nextHp =
+    typeof patch.baseHp === 'number' && Number.isFinite(patch.baseHp)
+      ? Math.min(200, Math.max(50, Math.round(patch.baseHp / 10) * 10))
+      : currentLeader.baseHp;
+
+  // 公式カードが選ばれている場合は、そのカード情報を優先反映
+  if (nextSourceCardId) {
+    const selectedCard = store.cardCatalog.find(
+      (card) => card.type === 'leader' && card.id === nextSourceCardId,
+    );
+
+    if (selectedCard) {
+      nextName = selectedCard.name;
+      const matchedHp = selectedCard.baseHp?.match(/\d+/);
+      if (matchedHp) {
+        nextHp = Math.min(200, Math.max(50, Math.round(Number(matchedHp[0]) / 10) * 10));
+      }
+    }
+  }
+
+  if (
+    currentLeader.name === nextName &&
+    currentLeader.baseHp === nextHp &&
+    currentLeader.sourceCardId === nextSourceCardId
+  ) {
+    return { leaderSetup: store.leaderSetup };
+  }
+
+  nextLeaderSetup[side][leaderIndex] = {
+    ...currentLeader,
+    name: nextName,
+    baseHp: nextHp,
+    sourceCardId: nextSourceCardId,
+  };
+
+  const sideLabel = side === 'self' ? '自分側' : '相手側';
+
+  return {
+    leaderSetup: nextLeaderSetup,
+    operationLogs: appendOperationLog(
+      store.operationLogs,
+      `${sideLabel}リーダー設定を更新しました: ${currentLeader.name} → ${nextName} / HP ${nextHp}${
+        nextSourceCardId ? ` / CARD ${nextSourceCardId}` : ''
+      }`,
+      'deck',
+    ),
+  };
+}),
       resetLeaderSetup: () => set((store) => ({
         leaderSetup: clone(DEFAULT_LEADER_SETUP),
         operationLogs: appendOperationLog(store.operationLogs, 'リーダー設定を推奨初期値に戻しました', 'deck'),

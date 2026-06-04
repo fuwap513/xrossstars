@@ -95,6 +95,7 @@ export type LeaderSetupEntry = {
   id: string;
   name: string;
   baseHp: number;
+  sourceCardId?: string;
 };
 
 export type LeaderSetup = {

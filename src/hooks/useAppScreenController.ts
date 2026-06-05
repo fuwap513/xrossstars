@@ -75,8 +75,15 @@ export default function useAppScreenController(): AppScreenControllerResult {
 
   const leaderSetupEditorProps = buildLeaderSetupEditorProps({
     leaderSetup: store.leaderSetup,
+    cardCatalog: store.cardCatalog,
     onUpdate: store.updateLeaderSetup,
     onReset: () => void bindings.appDataActions.handleResetLeaderSetup(),
+    onImportOfficialCardCatalog: async () => {
+      const response = await fetch('/data/xrossstars-bp01-bp03-official-cards.json');
+      if (!response.ok) return false;
+      const parsed = await response.json();
+      return store.importCardCatalog(parsed);
+    },
   });
 
   const battleScreenProps = buildBattleScreenProps({

@@ -135,7 +135,7 @@ export default function useBattleScreenState({
 }
     }
 
-    if (
+  if (
   !state.tacticsUsedThisTurn &&
   state.self.tacticsSet.length > 0 &&
   !setupRequired

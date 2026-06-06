@@ -1,17 +1,59 @@
-import type { Card, Leader } from '../types/game';
+import type { Leader, RegisteredCard } from '../types/game';
+
+type CardLookup =
+  | Map<string, RegisteredCard>
+  | Record<string, RegisteredCard | undefined>;
 
 type Props = {
   title: string;
   leaders: Leader[];
   selectedId?: string;
   onSelect?: (leaderId: string) => void;
-  cardLookup?: Map<string, Card>;
+  cardLookup?: CardLookup;
 };
 
+const getCurrentAtk = (leader: Leader) => leader.baseAtk + (leader.awakened ? 10 : 0);
+const getCurrentHp = (leader: Leader) => leader.baseHp + (leader.awakened ? 30 : 0);
+const getRemainingHp = (leader: Leader) =>
+  Math.max(0, getCurrentHp(leader) - leader.currentDamage);
 const getAwakenedAtk = (leader: Leader) => leader.baseAtk + 10;
 const getAwakenedHp = (leader: Leader) => leader.baseHp + 30;
-const getCurrentAtk = (leader: Leader) => (leader.awakened ? getAwakenedAtk(leader) : leader.baseAtk);
-const getCurrentHp = (leader: Leader) => (leader.awakened ? getAwakenedHp(leader) : leader.baseHp);
+
+const getCardFromLookup = (
+  lookup: CardLookup | undefined,
+  sourceCardId?: string,
+): RegisteredCard | undefined => {
+  if (!lookup || !sourceCardId) return undefined;
+
+  if (lookup instanceof Map) {
+    return lookup.get(sourceCardId);
+  }
+
+  return lookup[sourceCardId];
+};
+
+const getImageStatusLabel = (card?: RegisteredCard) => {
+  if (!card) return '画像未設定';
+  if (card.imageStatus === 'error') return '画像エラー';
+  if (card.officialImageUrl) return '公式画像';
+  return '画像未設定';
+};
+
+const buildVisibleLeaders = (leaders: Leader[]) => {
+  const normalized = [...leaders];
+  while (normalized.length < 4) {
+    normalized.push({
+      id: `empty-${normalized.length + 1}`,
+      name: '未設定',
+      baseAtk: 0,
+      baseHp: 0,
+      awakened: false,
+      currentDamage: 0,
+      isDown: false,
+    });
+  }
+  return normalized.slice(0, 4);
+};
 
 export default function LeaderRow({
   title,
@@ -20,103 +62,136 @@ export default function LeaderRow({
   onSelect,
   cardLookup,
 }: Props) {
+  const visibleLeaders = buildVisibleLeaders(leaders);
+
   return (
     <section className="panel">
       <div className="section-header">
         <h2>{title}</h2>
-        <span>{leaders.length}体</span>
+        <span>{leaders.length} / 4 リーダー</span>
       </div>
 
-      <div className="leader-grid">
-        {leaders.map((leader) => {
-          const currentHp = getCurrentHp(leader);
+      <div className="leader-grid top-gap">
+        {visibleLeaders.map((leader, index) => {
+          const isEmpty = leader.name === '未設定' && leader.baseHp === 0;
+          const matchedCard = getCardFromLookup(cardLookup, leader.sourceCardId);
+          const isSelected = !isEmpty && selectedId === leader.id;
           const currentAtk = getCurrentAtk(leader);
-          const remainingHp = Math.max(currentHp - leader.currentDamage, 0);
-          const isSelected = selectedId === leader.id;
-          const leaderCard = leader.sourceCardId
-            ? cardLookup?.get(leader.sourceCardId)
-            : undefined;
-          const imageStatusLabel = leaderCard?.officialImageUrl
-            ? '公式イラスト'
-            : '画像未設定';
+          const currentHp = getCurrentHp(leader);
+          const remainingHp = getRemainingHp(leader);
+          const awakenedAtk = getAwakenedAtk(leader);
+          const awakenedHp = getAwakenedHp(leader);
 
           return (
             <button
+              key={leader.id || `leader-slot-${index}`}
               type="button"
-              className={`leader-card ${isSelected ? 'selected' : ''} ${
-                leader.isDown
-                  ? 'state-down'
-                  : leader.awakened
-                    ? 'state-awakened'
-                    : 'state-normal'
-              }`}
-              key={leader.id}
-              onClick={() => onSelect?.(leader.id)}
+              className={[
+                'leader-card',
+                isSelected ? 'selected' : '',
+                leader.awakened ? 'state-awakened' : '',
+                leader.isDown ? 'state-down' : '',
+                isEmpty ? 'leader-card-empty' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => {
+                if (!isEmpty && onSelect) onSelect(leader.id);
+              }}
+              disabled={isEmpty || !onSelect}
             >
-              <div className="leader-art-shell">
-                {leaderCard?.officialImageUrl ? (
+              <div className="leader-art-wrap">
+                {matchedCard?.officialImageUrl ? (
                   <img
-                    className="leader-art-image"
-                    src={leaderCard.officialImageUrl}
-                    alt={`${leader.name} のリーダーイラスト`}
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
+                    src={matchedCard.officialImageUrl}
+                    alt={leader.name}
+                    className="leader-art"
                   />
                 ) : (
-                  <div className="leader-art-placeholder">
-                    <strong>{leader.name}</strong>
-                    <span>{imageStatusLabel}</span>
+                  <div className="leader-art leader-art-placeholder">
+                    <strong>{isEmpty ? `SLOT ${index + 1}` : leader.name}</strong>
+                    <span>{isEmpty ? 'リーダー未設定' : getImageStatusLabel(matchedCard)}</span>
                   </div>
                 )}
+              </div>
 
-                <div className="leader-overlay-row">
-                  <span
-                    className={`leader-status-chip ${
-                      leaderCard?.officialImageUrl
-                        ? 'leader-status-chip-ready'
-                        : 'leader-status-chip-muted'
-                    }`}
-                  >
-                    {imageStatusLabel}
+              <div className="detail-chip-row top-gap">
+                <span className={`detail-chip ${isEmpty ? 'detail-chip-muted' : ''}`}>
+                  {isEmpty
+                    ? '未設定'
+                    : leader.isDown
+                      ? 'DOWN'
+                      : leader.awakened
+                        ? '覚醒'
+                        : '通常'}
+                </span>
+
+                {!isEmpty && matchedCard?.officialCardNumber ? (
+                  <span className="detail-chip detail-chip-muted">
+                    {matchedCard.officialCardNumber}
                   </span>
-                  {leaderCard?.officialCardNumber && (
-                    <span className="leader-status-chip">
-                      {leaderCard.officialCardNumber}
-                    </span>
-                  )}
-                </div>
+                ) : null}
+
+                {!isEmpty && (leader.color ?? matchedCard?.color) ? (
+                  <span className="detail-chip detail-chip-success">
+                    {leader.color ?? matchedCard?.color}
+                  </span>
+                ) : null}
               </div>
 
-              <div className="leader-body">
-                <div className="leader-name-row">
-                  <div className="leader-name">{leader.name}</div>
-                  <div className="leader-badge">
-                    {leader.isDown ? 'DOWN' : leader.awakened ? '覚醒' : '通常'}
-                  </div>
-                </div>
-
-                <div className="leader-chip-row">
-                  <span className="detail-chip">現在 ATK {currentAtk}</span>
-                  <span className="detail-chip">現在 HP {remainingHp}/{currentHp}</span>
-                  {leader.color && <span className="detail-chip">{leader.color}</span>}
-                </div>
-
-                <div className="leader-meta-lines">
-                  <div className="leader-meta-line">
-                    通常 ATK {leader.baseAtk} / HP {leader.baseHp}
-                  </div>
-                  <div className="leader-meta-line">
-                    覚醒 ATK {getAwakenedAtk(leader)} / HP {getAwakenedHp(leader)}
-                  </div>
-                  <div className="leader-meta-line">
-                    ダメージ {leader.currentDamage} / 残りHP {remainingHp}
-                  </div>
-                </div>
-
-                {leader.effectText && (
-                  <div className="leader-damage">{leader.effectText}</div>
-                )}
+              <div className="leader-card-header top-gap">
+                <strong>{leader.name}</strong>
               </div>
+
+              {!isEmpty ? (
+                <>
+                  <div className="leader-stat-grid top-gap">
+                    <div className="detail-box">
+                      <div className="eyebrow">現在値</div>
+                      <div className="detail-description">
+                        ATK {currentAtk} / HP {remainingHp} / {currentHp}
+                      </div>
+                    </div>
+
+                    <div className="detail-box">
+                      <div className="eyebrow">通常</div>
+                      <div className="detail-description">
+                        ATK {leader.baseAtk} / HP {leader.baseHp}
+                      </div>
+                    </div>
+
+                    <div className="detail-box">
+                      <div className="eyebrow">覚醒</div>
+                      <div className="detail-description">
+                        ATK {awakenedAtk} / HP {awakenedHp}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="detail-chip-row top-gap">
+                    <span className="detail-chip">ダメージ {leader.currentDamage}</span>
+                    {leader.sourceCardId ? (
+                      <span className="detail-chip detail-chip-muted">
+                        CARD {leader.sourceCardId}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {leader.effectText ? (
+                    <div className="detail-box top-gap">
+                      <div className="eyebrow">効果</div>
+                      <div className="detail-description">{leader.effectText}</div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="detail-box top-gap">
+                  <div className="eyebrow">状態</div>
+                  <div className="detail-description">
+                    このスロットにはまだリーダーが設定されていません
+                  </div>
+                </div>
+              )}
             </button>
           );
         })}
@@ -124,4 +199,3 @@ export default function LeaderRow({
     </section>
   );
 }
-

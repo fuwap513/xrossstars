@@ -97,27 +97,29 @@ export default function useBattleScreenState({
     const hints: string[] = [];
 
     if (state.winner) {
-  hints.push(
-    state.winner === 'self'
-      ? '対戦終了：自分側の勝利です。'
-      : '対戦終了：相手側の勝利です。',
-  );
-  if (canUndoBattle) {
-    hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
-  }
-  return hints;
-}
+      hints.push(
+        state.winner === 'self'
+          ? '対戦終了：自分側の勝利です。'
+          : '対戦終了：相手側の勝利です。',
+      );
+
+      if (canUndoBattle) {
+        hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
+      }
+
+      return hints;
+    }
 
     if (pendingChoice) {
-  hints.push(`${pendingChoice.sourceCardName} の処理を選択してください。`);
-  return hints;
-}
+      hints.push(pendingChoice.prompt);
+      return hints;
+    }
 
     if (setupRequired) {
-  hints.push(
-    `ラウンド開始前にタクティクスをセットしてください（残り ${state.self.tacticsDeck.length} 枚）。`,
-  );
-}
+      hints.push(
+        `ラウンド開始前にタクティクスをセットしてください（残り ${state.self.tacticsDeck.length} 枚）。`,
+      );
+    }
 
     if (state.pendingDiscardCount > 0) {
       hints.push(`手札をあと ${state.pendingDiscardCount} 枚捨ててください。`);
@@ -130,32 +132,32 @@ export default function useBattleScreenState({
         hints.push(
           `手札 ${state.self.hand.length} 枚。PP ${state.ppCurrent} を使って行動できます。`,
         );
-     } else {
-  hints.push('手札がありません。ターン終了を検討してください。');
-}
+      } else {
+        hints.push('手札がありません。ターン終了を検討してください。');
+      }
     }
 
-  if (
-  !state.tacticsUsedThisTurn &&
-  state.self.tacticsSet.length > 0 &&
-  !setupRequired
-) {
-  hints.push(
-    `セット済みタクティクスが ${state.self.tacticsSet.length} 枚あります。1枚使用できます。`,
-  );
-}
+    if (
+      !state.tacticsUsedThisTurn &&
+      state.self.tacticsSet.length > 0 &&
+      !setupRequired
+    ) {
+      hints.push(
+        `セット済みタクティクスが ${state.self.tacticsSet.length} 枚あります。1枚使用できます。`,
+      );
+    }
 
     if (remainingOpponentLeaders === 1) {
-  hints.push('相手リーダーは残り1体です。');
-}
+      hints.push('相手リーダーは残り1体です。');
+    }
 
     if (state.self.ppTicket && state.round === 1) {
-  hints.push('PPチケットを使える状況です。');
-}
+      hints.push('PPチケットを使える状況です。');
+    }
 
     if (canUndoBattle) {
-  hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
-}
+      hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
+    }
 
     return hints.slice(0, 3);
   }, [
@@ -174,6 +176,21 @@ export default function useBattleScreenState({
     state.tacticsUsedThisTurn,
     state.winner,
   ]);
+
+  const latestLogMessage =
+    state.logs.length > 0
+      ? state.logs[state.logs.length - 1]
+      : '操作を選択してください。';
+
+  const logStatusText = state.winner
+    ? state.winner === 'self'
+      ? '勝利'
+      : '敗北'
+    : pendingChoice
+      ? '選択待ち'
+      : setupRequired
+        ? '準備中'
+        : '進行中';
 
   return {
     isSelfSecond,
@@ -196,23 +213,14 @@ export default function useBattleScreenState({
     pendingChoiceNeedsLeaderSelection,
     nextActionHints,
 
-    // 追加 alias（将来 BattleScreen 側を更新するとき用）
+    // BattleScreen 側の新旧どちらでも参照できる alias
     recentRoundSummaries: roundSummaries,
     selectableCards: pendingChoiceSelectableCards,
     selectableLeaders: pendingChoiceSelectableLeaders,
     requiresCardSelection: pendingChoiceNeedsCardSelection,
     requiresLeaderSelection: pendingChoiceNeedsLeaderSelection,
     cardCatalogMap: Object.fromEntries(cardCatalog.map((card) => [card.id, card])),
-    latestLogMessage: state.logs.at(-1) ?? '操作を選択してください。',
-    logStatusText: state.winner
-  ? state.winner === 'self'
-    ? '勝利'
-    : '敗北'
-  : pendingChoice
-    ? '選択待ち'
-    : setupRequired
-      ? '準備中'
-      : '進行中',
-
+    latestLogMessage,
+    logStatusText,
   };
 }

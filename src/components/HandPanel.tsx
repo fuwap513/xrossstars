@@ -3,7 +3,10 @@ import type { Card } from '../types/game';
 type Props = {
   cards: Card[];
   disabled: boolean;
-  onUseCard: (cardId: string) => void;
+  onUseCard: (
+    cardId: string,
+    options?: { forceCostPayment?: boolean },
+  ) => void;
   onPreviewCard: (card: Card) => void;
 };
 
@@ -22,17 +25,27 @@ function getImageStatusLabel(card: Card) {
   return '画像未設定';
 }
 
-export default function HandPanel({ cards, disabled, onUseCard, onPreviewCard }: Props) {
+export default function HandPanel({
+  cards,
+  disabled,
+  onUseCard,
+  onPreviewCard,
+}: Props) {
   return (
     <section className="panel">
       <div className="section-header">
         <h2>手札</h2>
         <span>{cards.length} / 12</span>
       </div>
+
       <div className="hand-scroll">
         {cards.map((card) => (
           <article className="hand-card" key={card.id}>
-            <button className="hand-card-preview" type="button" onClick={() => onPreviewCard(card)}>
+            <button
+              className="hand-card-preview"
+              type="button"
+              onClick={() => onPreviewCard(card)}
+            >
               <div className="hand-card-art-shell">
                 {card.officialImageUrl ? (
                   <img
@@ -48,11 +61,23 @@ export default function HandPanel({ cards, disabled, onUseCard, onPreviewCard }:
                     <span>{getImageStatusLabel(card)}</span>
                   </div>
                 )}
+
                 <div className="hand-card-overlay-row">
-                  <span className={`hand-card-status-chip ${card.officialImageUrl ? 'hand-card-status-chip-ready' : 'hand-card-status-chip-muted'}`}>
+                  <span
+                    className={`hand-card-status-chip ${
+                      card.officialImageUrl
+                        ? 'hand-card-status-chip-ready'
+                        : 'hand-card-status-chip-muted'
+                    }`}
+                  >
                     {getImageStatusLabel(card)}
                   </span>
-                  {card.officialCardNumber && <span className="hand-card-status-chip">{card.officialCardNumber}</span>}
+
+                  {card.officialCardNumber && (
+                    <span className="hand-card-status-chip">
+                      {card.officialCardNumber}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -60,17 +85,35 @@ export default function HandPanel({ cards, disabled, onUseCard, onPreviewCard }:
                 <div className="hand-card-chip-row">
                   <span className="detail-chip">{card.type.toUpperCase()}</span>
                   <span className="detail-chip">Cost {card.cost}</span>
-                  <span className="detail-chip">{effectLabelMap[card.effectType]}</span>
+                  <span className="detail-chip">
+                    {effectLabelMap[card.effectType]}
+                  </span>
+                  {card.color && <span className="detail-chip">{card.color}</span>}
                 </div>
+
                 <div className="card-name">{card.name}</div>
+
                 <div className="hand-card-stats-row">
-                  <span className="card-power">{typeof card.power === 'number' ? `Power ${card.power}` : `Effect ${card.effectValue}`}</span>
-                  {card.officialSet && <span className="hand-card-submeta">{card.officialSet}</span>}
+                  <span className="card-power">
+                    {typeof card.power === 'number'
+                      ? `Power ${card.power}`
+                      : `Effect ${card.effectValue}`}
+                  </span>
+                  {card.officialSet && (
+                    <span className="hand-card-submeta">{card.officialSet}</span>
+                  )}
                 </div>
+
                 <div className="card-text">{card.text}</div>
               </div>
             </button>
-            <button className="card-action-button" type="button" disabled={disabled} onClick={() => onUseCard(card.id)}>
+
+            <button
+              className="card-action-button"
+              type="button"
+              disabled={disabled}
+              onClick={() => onUseCard(card.id)}
+            >
               使用する
             </button>
           </article>
@@ -79,3 +122,4 @@ export default function HandPanel({ cards, disabled, onUseCard, onPreviewCard }:
     </section>
   );
 }
+

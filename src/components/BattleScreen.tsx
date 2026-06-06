@@ -350,7 +350,7 @@ export default function BattleScreen({
       </div>
 
       <div className="battle-lower-panels top-gap">
-        <section className="panel">
+               <section className="panel">
           <div className="section-header">
             <h2>セット済みタクティクス</h2>
             <span>{state.self.tacticsSet.length} 枚</span>
@@ -403,6 +403,7 @@ export default function BattleScreen({
             )}
           </div>
         </section>
+
         <section className="panel top-gap">
           <div className="section-header">
             <h2>手札</h2>

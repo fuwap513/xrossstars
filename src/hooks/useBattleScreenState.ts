@@ -98,10 +98,10 @@ export default function useBattleScreenState({
 
     if (state.winner) {
       hints.push(
-        state.winner === 'self'
-          ? '対戦終了：自分側の勝利です。'
-          : '対戦終了：相手側の勝利です。',
-      );
+  state.winner === 'self'
+    ? '対戦終了：自分側の勝利です。'
+    : '対戦終了：相手側の勝利です。',
+);
       if (canUndoBattle) {
         hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
       }
@@ -115,8 +115,8 @@ export default function useBattleScreenState({
 
     if (setupRequired) {
       hints.push(
-        `ラウンド開始前にタクティクスをセットしてください（残り ${state.self.tacticsDeck.length} 枚）。`,
-      );
+  `ラウンド開始前にタクティクスをセットしてください（残り ${state.self.tacticsDeck.length} 枚）。`,
+);
     }
 
     if (state.pendingDiscardCount > 0) {
@@ -141,8 +141,8 @@ export default function useBattleScreenState({
       !setupRequired
     ) {
       hints.push(
-        `セット済みタクティクスが ${state.self.tacticsSet.length} 枚あります。1枚使用できます。`,
-      );
+  `セット済みタクティクスが ${state.self.tacticsSet.length} 枚あります。1枚使用できます。`,
+);
     }
 
     if (remainingOpponentLeaders === 1) {
@@ -205,13 +205,13 @@ export default function useBattleScreenState({
     cardCatalogMap: Object.fromEntries(cardCatalog.map((card) => [card.id, card])),
     latestLogMessage: state.logs.at(-1) ?? '操作を選択してください。',
     logStatusText: state.winner
-      ? state.winner === 'self'
-        ? '勝利'
-        : '敗北'
-      : pendingChoice
-        ? '選択待ち'
-        : setupRequired
-          ? '準備中'
-          : '進行中',
+  ? state.winner === 'self'
+    ? '勝利'
+    : '敗北'
+  : pendingChoice
+    ? '選択待ち'
+    : setupRequired
+      ? '準備中'
+      : '進行中',
   };
 }

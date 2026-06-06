@@ -102,14 +102,17 @@ export default function useBattleScreenState({
     ? '対戦終了：自分側の勝利です。'
     : '対戦終了：相手側の勝利です。',
 );
+
       if (canUndoBattle) {
         hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
+
       }
       return hints;
     }
 
     if (pendingChoice) {
       hints.push(`${pendingChoice.sourceCardName} の処理を選択してください。`);
+
       return hints;
     }
 
@@ -117,6 +120,7 @@ export default function useBattleScreenState({
       hints.push(
   `ラウンド開始前にタクティクスをセットしてください（残り ${state.self.tacticsDeck.length} 枚）。`,
 );
+
     }
 
     if (state.pendingDiscardCount > 0) {
@@ -132,6 +136,7 @@ export default function useBattleScreenState({
         );
       } else {
         hints.push('手札がありません。ターン終了を検討してください。');
+
       }
     }
 
@@ -143,14 +148,17 @@ export default function useBattleScreenState({
       hints.push(
   `セット済みタクティクスが ${state.self.tacticsSet.length} 枚あります。1枚使用できます。`,
 );
+
     }
 
     if (remainingOpponentLeaders === 1) {
       hints.push('相手リーダーは残り1体です。');
+
     }
 
     if (state.self.ppTicket && state.round === 1) {
       hints.push('PPチケットを使える状況です。');
+
     }
 
     if (canUndoBattle) {
@@ -213,5 +221,6 @@ export default function useBattleScreenState({
     : setupRequired
       ? '準備中'
       : '進行中',
+
   };
 }

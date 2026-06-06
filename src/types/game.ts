@@ -354,3 +354,4 @@ export type GameStore = {
   cancelPendingChoice: () => void;
   endTurn: () => void;
 };
+

@@ -16,7 +16,9 @@ export type AppScreenBindings = {
   appDataActions: AppDataActionBindings;
 };
 
-export default function useAppScreenBindings(store: AppStoreBindings): AppScreenBindings {
+export default function useAppScreenBindings(
+  store: AppStoreBindings,
+): AppScreenBindings {
   const appUiState = useAppUiState({
     addOperationLog: store.addOperationLog,
   });

@@ -8,11 +8,18 @@ import type {
   MatchState,
   RegisteredCard,
   RoundSummaryEntry,
+  Side,
 } from '../types/game';
-import type { ConfirmOptions, ModalAction } from '../hooks/useModalLayerState';
 
-type StatusType = 'ok' | 'ng' | '';
-type RequestConfirm = (options: ConfirmOptions) => Promise<boolean>;
+type ConfirmTone = 'default' | 'danger';
+
+type ConfirmRequest = {
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: ConfirmTone;
+};
 
 type Props = {
   appName: string;
@@ -28,24 +35,41 @@ type Props = {
   targetLeaderRemainingHp: number;
   remainingOpponentLeaders: number;
   recentBattleHistory: BattleHistoryEntry[];
-  roundSummaries: RoundSummaryEntry[];
+  roundSummaries?: RoundSummaryEntry[];
+  recentRoundSummaries?: RoundSummaryEntry[];
   nextActionHints: string[];
-  cardCatalogById: Map<string, RegisteredCard>;
-  logActionMessage: string;
-  logActionStatus: StatusType;
-  requestConfirm: RequestConfirm;
-  applyDeckAndStartGame: (order: 'self' | 'opponent') => void;
-  resetGame: () => void;
-  clearSavedGame: () => void;
-  selectTargetLeader: (leaderId: string) => void;
-  selectActiveLeader: (leaderId: string) => void;
-  endTurn: () => void;
-  handleUndoBattle: () => void;
-  openPreview: (card: Card, title?: string, action?: ModalAction) => void;
-  playHandCard: (cardId: string, options?: { forceCostPayment?: boolean }) => void;
-  discardHandCard: (cardId: string) => void;
-  handleExportLog: () => void;
-  handleCopyLog: () => Promise<void>;
+  cardCatalogMap?: Record<string, RegisteredCard | undefined>;
+  cardCatalogById?: Map<string, RegisteredCard>;
+  latestLogMessage?: string;
+  logStatusText?: string;
+  selectableCards?: Card[];
+  pendingChoiceSelectableCards?: Card[];
+  selectableLeaders?: Leader[];
+  pendingChoiceSelectableLeaders?: Leader[];
+  requiresCardSelection?: boolean;
+  pendingChoiceNeedsCardSelection?: boolean;
+  requiresLeaderSelection?: boolean;
+  pendingChoiceNeedsLeaderSelection?: boolean;
+  requestConfirm?: (options: ConfirmRequest) => Promise<boolean>;
+  applyDeckAndStartGame?: (firstPlayer?: Side) => void;
+  resetGame?: () => void;
+  clearSavedGame?: () => void;
+  selectTargetLeader?: (leaderId: string) => void;
+  selectActiveLeader?: (leaderId: string) => void;
+  endTurn?: () => void;
+  handleUndoBattle?: () => void;
+  openPreview?: (card: Card) => void;
+  playHandCard?: (cardId: string) => void;
+  discardHandCard?: (cardId: string) => void;
+  handleExportLog?: () => void;
+  handleCopyLog?: () => void;
+  [key: string]: unknown;
+};
+
+const formatTimestamp = (value?: string) => {
+  if (!value) return '';
+  const normalized = value.replace('T', ' ').replace('Z', '');
+  return normalized.length > 16 ? normalized.slice(0, 16) : normalized;
 };
 
 export default function BattleScreen({
@@ -63,10 +87,20 @@ export default function BattleScreen({
   remainingOpponentLeaders,
   recentBattleHistory,
   roundSummaries,
+  recentRoundSummaries,
   nextActionHints,
+  cardCatalogMap,
   cardCatalogById,
-  logActionMessage,
-  logActionStatus,
+  latestLogMessage,
+  logStatusText,
+  selectableCards,
+  pendingChoiceSelectableCards,
+  selectableLeaders,
+  pendingChoiceSelectableLeaders,
+  requiresCardSelection,
+  pendingChoiceNeedsCardSelection,
+  requiresLeaderSelection,
+  pendingChoiceNeedsLeaderSelection,
   requestConfirm,
   applyDeckAndStartGame,
   resetGame,
@@ -81,409 +115,491 @@ export default function BattleScreen({
   handleExportLog,
   handleCopyLog,
 }: Props) {
-  const handleResetSameCondition = async () => {
-    const confirmed = await requestConfirm({
-      title: '同条件でリセット',
-      message: '現在の対戦状態を破棄して、同条件で最初からやり直します。よろしいですか？',
-      confirmLabel: 'リセットする',
-      cancelLabel: 'キャンセル',
-      tone: 'danger',
-    });
-    if (!confirmed) return;
-    resetGame();
+  const leaderLookup = cardCatalogById ?? cardCatalogMap;
+  const summaryItems = recentRoundSummaries ?? roundSummaries ?? [];
+  const cardChoices = selectableCards ?? pendingChoiceSelectableCards ?? [];
+  const leaderChoices = selectableLeaders ?? pendingChoiceSelectableLeaders ?? [];
+  const needsCardSelection =
+    requiresCardSelection ?? pendingChoiceNeedsCardSelection ?? false;
+  const needsLeaderSelection =
+    requiresLeaderSelection ?? pendingChoiceNeedsLeaderSelection ?? false;
+
+  const confirmWithFallback = async (
+    message: string,
+    title = '確認',
+    tone: ConfirmTone = 'danger',
+  ) => {
+    if (requestConfirm) {
+      return requestConfirm({
+        title,
+        message,
+        confirmLabel: '実行する',
+        cancelLabel: 'キャンセル',
+        tone,
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      return window.confirm(message);
+    }
+
+    return false;
   };
 
-  const handleClearAllSavedData = async () => {
-    const confirmed = await requestConfirm({
-      title: '保存データ削除',
-      message: '保存データをすべて削除します。デッキ構成・プリセット・対戦状態が初期化されます。よろしいですか？',
-      confirmLabel: '削除する',
-      cancelLabel: 'キャンセル',
-      tone: 'danger',
-    });
-    if (!confirmed) return;
-    clearSavedGame();
+  const handleResetGame = async () => {
+    if (!resetGame) return;
+    const ok = await confirmWithFallback(
+      '現在の対戦状態をリセットします。よろしいですか？',
+      '対戦リセット',
+      'danger',
+    );
+    if (ok) resetGame();
   };
 
-  const handleRetryBattle = async () => {
-    const confirmed = await requestConfirm({
-      title: '再試行',
-      message: '現在の対戦状態を破棄して、この試合を再試行します。よろしいですか？',
-      confirmLabel: '再試行する',
-      cancelLabel: 'キャンセル',
-      tone: 'danger',
-    });
-    if (!confirmed) return;
-    resetGame();
+  const handleClearAll = async () => {
+    if (!clearSavedGame) return;
+    const ok = await confirmWithFallback(
+      '保存済みデータを削除します。よろしいですか？',
+      '保存データ削除',
+      'danger',
+    );
+    if (ok) clearSavedGame();
   };
 
   return (
-    <>
-      <section className="panel battle-core-board">
+    <div className="battle-screen">
+      <section className="panel battle-management-panel">
         <div className="section-header">
-          <h2>対戦盤面</h2>
-          <span>{state.winner ? '試合終了' : `Round ${state.round} / Turn ${state.turn}`}</span>
+          <h2>対戦管理</h2>
+          <span>{logStatusText ?? '進行中'}</span>
         </div>
 
-        <div className="battle-overview-row">
-          <div className="compact-card battle-overview-card">
-            <div className="support-label">進行</div>
-            <strong>{state.firstPlayer === 'self' ? '先攻' : '後攻'}</strong>
-            <span>PP {state.ppCurrent} / {state.ppMax}</span>
-          </div>
-          <div className="compact-card battle-overview-card">
-            <div className="support-label">相手残りリーダー</div>
-            <strong>{remainingOpponentLeaders}</strong>
-            <span>{state.opponent.wins} 勝 / 自分 {state.self.wins} 勝</span>
-          </div>
-          <div className="compact-card battle-overview-card">
-            <div className="support-label">手札 / セット</div>
-            <strong>{state.self.hand.length} / {state.self.tacticsSet.length}</strong>
-            <span>タクティクス山 {state.self.tacticsDeck.length}</span>
-          </div>
-          <div className="compact-card battle-overview-card">
-            <div className="support-label">場 / トラッシュ</div>
-            <strong>{state.fieldCards.length} / {state.self.trash.length}</strong>
-            <span>装備 {state.self.equipmentZone.length}</span>
-          </div>
-        </div>
-
-        <div className="battle-control-bar">
-          <button onClick={endTurn} disabled={Boolean(state.winner)}>ターン終了</button>
-          <button
-            className="ghost-button"
-            onClick={handleUndoBattle}
-            disabled={!canUndoBattle}
-          >
-            1手戻す
+        <div className="action-row wrap-actions top-gap">
+          <button onClick={() => applyDeckAndStartGame?.('self')}>先攻で開始</button>
+          <button onClick={() => applyDeckAndStartGame?.('opponent')}>後攻で開始</button>
+          <button className="ghost-button" onClick={() => void handleResetGame()}>
+            対戦をリセット
           </button>
-          <button onClick={() => void handleRetryBattle()}>再試行</button>
+          <button className="danger-button" onClick={() => void handleClearAll()}>
+            保存データを削除
+          </button>
         </div>
 
+        <div className="status-grid top-gap">
+          <div className="detail-box">
+            <div className="eyebrow">ラウンド</div>
+            <div className="detail-description">
+              {state.round} / 3 ・ ターン {state.turn}
+            </div>
+          </div>
+
+          <div className="detail-box">
+            <div className="eyebrow">PP</div>
+            <div className="detail-description">
+              {state.ppCurrent} / {state.ppMax}
+            </div>
+          </div>
+
+          <div className="detail-box">
+            <div className="eyebrow">先攻</div>
+            <div className="detail-description">
+              {state.firstPlayer === 'self' ? '自分' : '相手'}
+            </div>
+          </div>
+
+          <div className="detail-box">
+            <div className="eyebrow">相手残数</div>
+            <div className="detail-description">{remainingOpponentLeaders} 体</div>
+          </div>
+
+          <div className="detail-box">
+            <div className="eyebrow">自分手札 / 山札 / トラッシュ</div>
+            <div className="detail-description">
+              {state.self.hand.length} / {state.self.mainDeck.length} / {state.self.trash.length}
+            </div>
+          </div>
+
+          <div className="detail-box">
+            <div className="eyebrow">相手手札 / 山札 / トラッシュ</div>
+            <div className="detail-description">
+              {state.opponent.hand.length} / {state.opponent.mainDeck.length} /{' '}
+              {state.opponent.trash.length}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel top-gap">
+        <div className="section-header">
+          <h2>次の行動ヒント</h2>
+          <span>{latestLogMessage ?? '操作を選択してください。'}</span>
+        </div>
+
+        <div className="top-gap">
+          {nextActionHints.length > 0 ? (
+            <ul className="hint-list">
+              {nextActionHints.map((hint, index) => (
+                <li key={`${hint}-${index}`}>{hint}</li>
+              ))}
+            </ul>
+          ) : (
+            <div className="detail-box">操作候補はありません。</div>
+          )}
+        </div>
+      </section>
+
+      <div className="battle-core-board top-gap">
         <LeaderRow
-          title="相手リーダー（4体常時表示 / 対象選択）"
+          title="相手リーダー"
           leaders={state.opponent.leaders}
           selectedId={state.targetLeaderId}
           onSelect={selectTargetLeader}
-          cardLookup={cardCatalogById}
+          cardLookup={leaderLookup}
         />
 
         <section className="panel battle-shared-area">
           <div className="section-header">
             <h2>共有プレイエリア</h2>
-            <span>場のカード {state.fieldCards.length}</span>
+            <span>{state.fieldCards.length} 枚</span>
           </div>
 
-          <div className="battle-focus-grid">
-            <div className="compact-card">
-              <div className="support-label">対象リーダー</div>
-              <strong>{targetLeader?.name ?? '未選択'}</strong>
-              <span>
-                現在 HP {targetLeaderRemainingHp} / {targetLeaderMaxHp}
-              </span>
+          <div className="battle-focus-grid top-gap">
+            <div className="detail-box">
+              <div className="eyebrow">アクティブリーダー</div>
+              <div className="detail-description">
+                {activeLeader
+                  ? `${activeLeader.name} / HP ${activeLeaderRemainingHp} / ${activeLeaderMaxHp}`
+                  : '未選択'}
+              </div>
             </div>
-            <div className="compact-card">
-              <div className="support-label">アクティブリーダー</div>
-              <strong>{activeLeader?.name ?? '未選択'}</strong>
-              <span>
-                現在 HP {activeLeaderRemainingHp} / {activeLeaderMaxHp}
-              </span>
+
+            <div className="detail-box">
+              <div className="eyebrow">対象リーダー</div>
+              <div className="detail-description">
+                {targetLeader
+                  ? `${targetLeader.name} / HP ${targetLeaderRemainingHp} / ${targetLeaderMaxHp}`
+                  : '未選択'}
+              </div>
+            </div>
+
+            <div className="detail-box">
+              <div className="eyebrow">攻撃補正</div>
+              <div className="detail-description">
+                次攻撃 +{state.nextAttackBuff} / ターン +{state.turnAttackBuff} / ラウンド +{state.roundAttackBuff}
+              </div>
+            </div>
+
+            <div className="detail-box">
+              <div className="eyebrow">タクティクス状態</div>
+              <div className="detail-description">
+                {state.roundTacticSelected ? 'ラウンドセット済み' : '未セット'} /{' '}
+                {state.tacticsUsedThisTurn ? 'このターン使用済み' : '未使用'}
+              </div>
+            </div>
+
+            <div className="detail-box">
+              <div className="eyebrow">その他</div>
+              <div className="detail-description">
+                捨て待ち {state.pendingDiscardCount} / PPチケット{' '}
+                {state.self.ppTicket ? 'あり' : 'なし'}
+              </div>
             </div>
           </div>
 
-          {setupRequired && (
-            <div className="import-status ng">
-              ラウンド開始処理: このラウンドで使うタクティクスを1枚セットしてください
-            </div>
-          )}
+          <div className="action-row wrap-actions top-gap">
+            <button onClick={() => endTurn?.()}>ターン終了</button>
+            <button onClick={() => handleUndoBattle?.()} disabled={!canUndoBattle}>
+              やり直す
+            </button>
+          </div>
 
-          {state.fieldCards.length > 0 ? (
-            <div className="battle-field-grid">
-              {state.fieldCards.map((card) => (
+          {setupRequired ? (
+            <div className="import-status ng top-gap">
+              まだラウンド開始準備が完了していません。タクティクス設定を確認してください。
+            </div>
+          ) : null}
+
+          <div className="field-grid top-gap">
+            {state.fieldCards.length > 0 ? (
+              state.fieldCards.map((card, index) => (
                 <FieldCardTile
-                  key={card.id}
+                  key={`${card.id}-${index}`}
                   card={card}
-                  title="共有プレイエリア"
-                  subtitle="場に出ているカード"
-                  onClick={() => openPreview(card, '共有プレイエリア / カード詳細')}
+                  title={`場のカード ${index + 1}`}
+                  subtitle={card.name}
+                  onClick={() => openPreview?.(card)}
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="battle-field-empty">
-              共有プレイエリアにカードはまだありません
-            </div>
-          )}
-
-          <div className="battle-summary">
-            <div><strong>次回攻撃補正:</strong> +{state.nextAttackBuff}</div>
-            <div><strong>ターン中補正:</strong> +{state.turnAttackBuff}</div>
-            <div><strong>タクティクス使用:</strong> {state.tacticsUsedThisTurn ? '使用済み' : '未使用'}</div>
-            <div><strong>要ディスカード:</strong> {state.pendingDiscardCount} 枚</div>
-            <div><strong>後攻補助:</strong> {state.self.ppTicket ? 'PP回復タクティクスあり' : 'なし'}</div>
-            <div><strong>ラウンド開始セット:</strong> {state.roundTacticSelected ? '完了' : '未選択'}</div>
+              ))
+            ) : (
+              <div className="detail-box">
+                <div className="eyebrow">場の状態</div>
+                <div className="detail-description">場のカードはまだありません</div>
+              </div>
+            )}
           </div>
         </section>
 
         <LeaderRow
-          title="自分リーダー（4体常時表示 / 攻撃役選択）"
+          title="自分リーダー"
           leaders={state.self.leaders}
           selectedId={state.activeLeaderId}
           onSelect={selectActiveLeader}
-          cardLookup={cardCatalogById}
+          cardLookup={leaderLookup}
         />
-      </section>
+      </div>
 
-      <section className="panel battle-management-panel">
-        <div className="section-header">
-          <h2>対戦管理</h2>
-          <span>現在の構成でそのまま検証を開始・再開できます</span>
-        </div>
-        <div className="action-row wrap-actions">
-          <button onClick={() => applyDeckAndStartGame('self')}>先攻で開始</button>
-          <button onClick={() => applyDeckAndStartGame('opponent')}>後攻で開始</button>
-          <button onClick={() => void handleResetSameCondition()}>同条件でリセット</button>
-          <button className="ghost-button" onClick={() => void handleClearAllSavedData()}>
-            保存データ削除
-          </button>
-        </div>
-      </section>
-
-      <section className="status-row status-row-6">
-        <div className="panel status-card"><div>メインデッキ</div><strong>{state.self.mainDeck.length}</strong></div>
-        <div className="panel status-card"><div>タクティクス山</div><strong>{state.self.tacticsDeck.length}</strong></div>
-        <div className="panel status-card"><div>セット中</div><strong>{state.self.tacticsSet.length}</strong></div>
-        <div className="panel status-card"><div>装備</div><strong>{state.self.equipmentZone.length}</strong></div>
-        <div className="panel status-card"><div>トラッシュ</div><strong>{state.self.trash.length}</strong></div>
-        <div className="panel status-card"><div>勝利R</div><strong>{state.self.wins} - {state.opponent.wins}</strong></div>
-      </section>
-
-      <section className="panel support-panel">
-        <div className="section-header">
-          <h2>進行サポート</h2>
-          <span>次の一手を確認</span>
-        </div>
-        <div className="support-summary-grid top-gap">
-          <div className="compact-card">
-            <div className="support-label">自分の攻撃役</div>
-            <strong>{activeLeader?.name ?? '未選択'}</strong>
-            <span>{activeLeaderRemainingHp} / {activeLeaderMaxHp} HP</span>
-          </div>
-          <div className="compact-card">
-            <div className="support-label">相手の対象</div>
-            <strong>{targetLeader?.name ?? '未選択'}</strong>
-            <span>{targetLeaderRemainingHp} / {targetLeaderMaxHp} HP</span>
-          </div>
-          <div className="compact-card">
-            <div className="support-label">このターンの行動札</div>
-            <strong>{state.self.hand.length + state.self.tacticsSet.length}</strong>
-            <span>手札 {state.self.hand.length} / セット済み {state.self.tacticsSet.length}</span>
-          </div>
-          <div className="compact-card">
-            <div className="support-label">相手残りリーダー</div>
-            <strong>{remainingOpponentLeaders}</strong>
-            <span>{state.winner ? '試合終了' : 'ダウンでラウンド進行'}</span>
-          </div>
-        </div>
-        <div className="support-tip-list top-gap">
-          {nextActionHints.map((hint, index) => (
-            <div className="support-tip" key={`${hint}-${index}`}>
-              <strong>ヒント {index + 1}</strong>
-              <p>{hint}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="section-header">
-          <h2>セット可能タクティクス</h2>
-          <span>{state.roundTacticSelected ? 'このラウンドはセット済み' : '1枚選択できます'}</span>
-        </div>
-        <div className="mini-card-grid field-card-grid">
-          {state.self.tacticsDeck.map((card) => (
-            <FieldCardTile
-              key={card.id}
-              card={card}
-              title="セット可能タクティクス"
-              subtitle="プレビューからこのラウンドにセット"
-              onClick={() =>
-                openPreview(card, 'セット可能タクティクス', {
-                  type: 'set-tactic',
-                  cardId: card.id,
-                })
-              }
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="section-header">
-          <h2>セット済みタクティクス / 装備</h2>
-          <span>同一ターン1枚まで</span>
-        </div>
-        <div className="mini-card-grid field-card-grid">
-          {state.self.tacticsSet.map((card) => (
-            <FieldCardTile
-              key={card.id}
-              card={card}
-              title="セット済みタクティクス"
-              subtitle="プレビューから使用可能"
-              onClick={() =>
-                openPreview(card, 'セット済みタクティクス', {
-                  type: 'use-set-tactic',
-                  cardId: card.id,
-                })
-              }
-            />
-          ))}
-          {state.self.equipmentZone.map((card) => (
-            <FieldCardTile
-              key={card.id}
-              card={card}
-              title="装備カード"
-              subtitle={`装備中: 攻撃 +${card.effectValue}`}
-              accent="equipment"
-              onClick={() => openPreview(card, '装備カード詳細')}
-            />
-          ))}
-        </div>
-      </section>
-
-      <HandPanel
-        cards={state.self.hand}
-        disabled={state.pendingDiscardCount > 0 || Boolean(state.winner) || Boolean(state.pendingChoice)}
-        onUseCard={playHandCard}
-        onPreviewCard={(card) =>
-          openPreview(card, '手札カード詳細', {
-            type: 'play-hand',
-            cardId: card.id,
-          })
-        }
-      />
-
-      {state.pendingDiscardCount > 0 && (
-        <section className="panel discard-panel">
-          <div className="section-header">
-            <h2>手札調整</h2>
-            <span>あと {state.pendingDiscardCount} 枚捨てる</span>
-          </div>
-          <div className="mini-card-grid field-card-grid discard-card-grid">
-            {state.self.hand.map((card) => (
-              <FieldCardTile
-                key={card.id}
-                card={card}
-                title="手札調整 / 捨てる候補"
-                subtitle={`あと ${state.pendingDiscardCount} 枚捨てる`}
-                accent="warning"
-                actionLabel="このカードを捨てる"
-                actionTone="warning"
-                onClick={() => openPreview(card, '手札調整 / カード詳細')}
-                onAction={() => discardHandCard(card.id)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="bottom-grid">
+      <div className="battle-lower-panels top-gap">
         <section className="panel">
           <div className="section-header">
-            <h2>ログ</h2>
-            <span>最新12件</span>
+            <h2>セット済みタクティクス</h2>
+            <span>{state.self.tacticsSet.length} 枚</span>
           </div>
+
+          <div className="field-grid top-gap">
+            {state.self.tacticsSet.length > 0 ? (
+              state.self.tacticsSet.map((card, index) => (
+                <FieldCardTile
+                  key={`${card.id}-${index}`}
+                  card={card}
+                  title={`タクティクス ${index + 1}`}
+                  subtitle={card.name}
+                  onClick={() => openPreview?.(card)}
+                />
+              ))
+            ) : (
+              <div className="detail-box">
+                <div className="detail-description">
+                  セット済みタクティクスはありません
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="panel top-gap">
+          <div className="section-header">
+            <h2>装備・サポート</h2>
+            <span>{state.self.equipmentZone.length} 枚</span>
+          </div>
+
+          <div className="field-grid top-gap">
+            {state.self.equipmentZone.length > 0 ? (
+              state.self.equipmentZone.map((card, index) => (
+                <FieldCardTile
+                  key={`${card.id}-${index}`}
+                  card={card}
+                  title={`装備 ${index + 1}`}
+                  subtitle={card.name}
+                  onClick={() => openPreview?.(card)}
+                />
+              ))
+            ) : (
+              <div className="detail-box">
+                <div className="detail-description">
+                  装備中のカードはありません
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="panel top-gap">
+          <div className="section-header">
+            <h2>手札</h2>
+            <span>{state.self.hand.length} 枚</span>
+          </div>
+
+          <div className="top-gap">
+            <HandPanel
+              cards={state.self.hand}
+              disabled={Boolean(state.winner) || needsCardSelection}
+              onUseCard={(cardId) => playHandCard?.(cardId)}
+              onPreviewCard={(card) => openPreview?.(card)}
+            />
+          </div>
+        </section>
+
+        {needsCardSelection ? (
+          <section className="panel top-gap">
+            <div className="section-header">
+              <h2>選択対象カード</h2>
+              <span>{cardChoices.length} 枚</span>
+            </div>
+
+            <div className="field-grid top-gap">
+              {cardChoices.map((card, index) => (
+                <FieldCardTile
+                  key={`${card.id}-${index}`}
+                  card={card}
+                  title={`候補 ${index + 1}`}
+                  subtitle={card.name}
+                  onClick={() => openPreview?.(card)}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {needsLeaderSelection ? (
+          <section className="panel top-gap">
+            <div className="section-header">
+              <h2>選択対象リーダー</h2>
+              <span>{leaderChoices.length} 体</span>
+            </div>
+
+            <LeaderRow
+              title="選択候補"
+              leaders={leaderChoices}
+              cardLookup={leaderLookup}
+            />
+          </section>
+        ) : null}
+
+        {state.pendingDiscardCount > 0 && state.self.hand.length > 0 ? (
+          <section className="panel top-gap">
+            <div className="section-header">
+              <h2>捨て札候補</h2>
+              <span>残り {state.pendingDiscardCount} 枚</span>
+            </div>
+
+            <div className="field-grid top-gap">
+              {state.self.hand.map((card, index) => (
+                <FieldCardTile
+                  key={`${card.id}-${index}`}
+                  card={card}
+                  title={`手札 ${index + 1}`}
+                  subtitle={card.name}
+                  onClick={() => openPreview?.(card)}
+                />
+              ))}
+            </div>
+
+            <div className="action-row wrap-actions top-gap">
+              {state.self.hand.map((card, index) => (
+                <button
+                  key={`${card.id}-discard-${index}`}
+                  className="ghost-button"
+                  onClick={() => discardHandCard?.(card.id)}
+                >
+                  {card.name} を捨てる
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        <section className="panel top-gap">
+          <div className="section-header">
+            <h2>バトルログ</h2>
+            <span>{state.logs.length} 件</span>
+          </div>
+
           <div className="action-row wrap-actions top-gap">
-            <button onClick={handleExportLog}>TXTを書き出す</button>
-            <button className="ghost-button" onClick={() => void handleCopyLog()}>
-              クリップボードにコピー
+            <button className="ghost-button" onClick={() => handleExportLog?.()}>
+              ログを出力
+            </button>
+            <button className="ghost-button" onClick={() => handleCopyLog?.()}>
+              ログをコピー
             </button>
           </div>
-          {logActionMessage && (
-            <div className={`import-status ${logActionStatus} top-gap`}>
-              {logActionMessage}
-            </div>
-          )}
-          <ul className="log-list">
-            {state.logs.map((log, index) => (
-              <li key={`${log}-${index}`}>{log}</li>
-            ))}
-          </ul>
+
+          <div className="log-list top-gap">
+            {state.logs.length > 0 ? (
+              [...state.logs].slice(-20).reverse().map((entry, index) => (
+                <div className="detail-box" key={`${entry}-${index}`}>
+                  <div className="detail-description">{entry}</div>
+                </div>
+              ))
+            ) : (
+              <div className="detail-box">
+                <div className="detail-description">まだログはありません</div>
+              </div>
+            )}
+          </div>
         </section>
 
-        <section className="panel">
+        <section className="panel top-gap">
+          <div className="section-header">
+            <h2>対戦履歴</h2>
+            <span>{recentBattleHistory.length} 件</span>
+          </div>
+
+          <div className="log-list top-gap">
+            {recentBattleHistory.length > 0 ? (
+              recentBattleHistory.map((entry) => (
+                <div className="detail-box" key={entry.id}>
+                  <div className="eyebrow">
+                    R{entry.round} / T{entry.turn} / {formatTimestamp(entry.timestamp)}
+                  </div>
+                  <div className="detail-description">{entry.message}</div>
+                </div>
+              ))
+            ) : (
+              <div className="detail-box">
+                <div className="detail-description">履歴はまだありません</div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="panel top-gap">
+          <div className="section-header">
+            <h2>ラウンドサマリー</h2>
+            <span>{summaryItems.length} 件</span>
+          </div>
+
+          <div className="log-list top-gap">
+            {summaryItems.length > 0 ? (
+              summaryItems.map((summary) => (
+                <div className="detail-box" key={summary.id}>
+                  <div className="eyebrow">
+                    Round {summary.round} / Turn {summary.turnReached}
+                  </div>
+                  <div className="detail-description">
+                    自分勝利数 {summary.selfWins} ・ 自分DOWN {summary.selfLeadersDown} ・
+                    相手DOWN {summary.opponentLeadersDown}
+                  </div>
+                  <div className="detail-description">
+                    手札 {summary.handCount} / 山札 {summary.deckCount} / トラッシュ {summary.trashCount}
+                  </div>
+                  <div className="detail-description">{summary.note}</div>
+                </div>
+              ))
+            ) : (
+              <div className="detail-box">
+                <div className="detail-description">サマリーはまだありません</div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="panel top-gap">
           <div className="section-header">
             <h2>アプリ情報</h2>
-            <span>インストール・保存・検証をひとまとめ</span>
+            <span>
+              {appName} / {appVersion}
+            </span>
           </div>
-          <ul className="todo-list">
-            <li>リーダー設定で名前と基礎HPを事前に調整できます</li>
-            <li>1手戻すで直前の対戦操作を段階的に巻き戻せます</li>
-            <li>対戦履歴を時系列で残し、TXT出力には全履歴を含めます</li>
-            <li>ラウンドごとの到達ターンや盤面状況をサマリー表示します</li>
-            <li>対戦ログ・操作ログ・利用統計を分けて確認できます</li>
-            <li>バックアップJSONで端末間の引き継ぎを行えます</li>
-            <li>PWAとしてホーム画面追加・全画面表示・オフライン再表示に対応しています</li>
-            <li>オフライン保存を行うと通信不安定時でも再表示しやすくなります</li>
-            <li>デッキ編集のプリセットとJSON入出力で検証条件を再利用できます</li>
-          </ul>
-          <div className="app-info-box top-gap">
-            <strong>{appName}</strong>
-            <span>{appVersion}</span>
-            <p>端末保存を前提に、オフライン導線・バックアップ・履歴確認を揃えた検証向けアプリとして整理しています。</p>
+
+          <div className="detail-box top-gap">
+            <div className="eyebrow">状態</div>
+            <div className="detail-description">{logStatusText ?? '進行中'}</div>
           </div>
-          {state.winner && <div className="winner-banner">勝者: 自分</div>}
+
+          <div className="detail-box top-gap">
+            <div className="eyebrow">最新ログ</div>
+            <div className="detail-description">
+              {latestLogMessage ?? '操作を選択してください。'}
+            </div>
+          </div>
+
+          {state.winner ? (
+            <div className="import-status ok top-gap">
+              対戦結果: {state.winner === 'self' ? '自分側の勝利' : '相手側の勝利'}
+            </div>
+          ) : null}
         </section>
-      </section>
-
-      <section className="panel battle-history-panel">
-        <div className="section-header">
-          <h2>対戦履歴</h2>
-          <span>最新 {recentBattleHistory.length} / 累計 {state.battleHistory.length} 件</span>
-        </div>
-        <p>
-          この試合で発生した対戦イベントを保持します。TXT出力には全履歴を含み、
-          1手戻すを使うと履歴も現在状態に合わせて戻ります。
-        </p>
-        <div className="battle-history-list top-gap">
-          {recentBattleHistory.map((entry) => (
-            <article className="battle-history-item" key={entry.id}>
-              <div className="battle-history-meta">
-                <span className="detail-chip">R{entry.round} / T{entry.turn}</span>
-                <span>{new Date(entry.timestamp).toLocaleString('ja-JP')}</span>
-              </div>
-              <p>{entry.message}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel round-summary-panel">
-        <div className="section-header">
-          <h2>ラウンドサマリー</h2>
-          <span>最新 {roundSummaries.length} 件</span>
-        </div>
-        <div className="round-summary-list top-gap">
-          {roundSummaries.map((summary) => (
-            <article className="compact-card" key={summary.id}>
-              <div className="battle-history-meta">
-                <span className="detail-chip">Round {summary.round}</span>
-                <span>到達ターン {summary.turnReached}</span>
-              </div>
-              <div className="battle-summary top-gap">
-                <div><strong>勝利数:</strong> 自分 {summary.selfWins}</div>
-                <div><strong>自分ダウン:</strong> {summary.selfLeadersDown}</div>
-                <div><strong>相手ダウン:</strong> {summary.opponentLeadersDown}</div>
-                <div><strong>手札:</strong> {summary.handCount}</div>
-                <div><strong>山札:</strong> {summary.deckCount}</div>
-                <div><strong>トラッシュ:</strong> {summary.trashCount}</div>
-              </div>
-              <p className="top-gap">{summary.note}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-    </>
+      </div>
+    </div>
   );
 }
-

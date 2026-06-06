@@ -1,11 +1,5 @@
 import { useMemo } from 'react';
-import type {
-  Card,
-  Leader,
-  MatchState,
-  PendingBattleChoice,
-  RegisteredCard,
-} from '../types/game';
+import type { MatchState, PendingBattleChoice, RegisteredCard } from '../types/game';
 
 type Params = {
   state: MatchState;
@@ -13,36 +7,13 @@ type Params = {
   cardCatalog: RegisteredCard[];
 };
 
-const CARD_SELECTION_KINDS: PendingBattleChoice['kind'][] = [
-  'optional_discard_for_attack_bonus',
-  'optional_cost0_discard_for_attack_bonus',
-  'post_attack_self_discard',
-  'self_discard_after_draw',
-];
-
-const LEADER_SELECTION_KINDS: PendingBattleChoice['kind'][] = [
-  'post_attack_other_leader_damage',
-  'drain_rod_heal_distribution',
-  'drain_rod_damage_target',
-];
-
-export const getLeaderMaxHp = (leader: Leader) =>
-  leader.baseHp + (leader.awakened ? 30 : 0);
-
-export const getLeaderRemainingHp = (leader: Leader) =>
-  Math.max(0, getLeaderMaxHp(leader) - leader.currentDamage);
+export const getLeaderMaxHp = (leader?: { baseHp: number; awakened: boolean }) =>
+  leader ? leader.baseHp + (leader.awakened ? 30 : 0) : 0;
 
 const needsLeaderSelection = (pendingChoice?: PendingBattleChoice) =>
-  Boolean(
-    pendingChoice &&
-      LEADER_SELECTION_KINDS.includes(pendingChoice.kind),
-  );
-
-const needsCardSelection = (pendingChoice?: PendingBattleChoice) =>
-  Boolean(
-    pendingChoice &&
-      CARD_SELECTION_KINDS.includes(pendingChoice.kind),
-  );
+  pendingChoice?.kind === 'post_attack_other_leader_damage' ||
+  pendingChoice?.kind === 'drain_rod_heal_distribution' ||
+  pendingChoice?.kind === 'drain_rod_damage_target';
 
 export default function useBattleScreenState({
   state,
@@ -51,100 +22,76 @@ export default function useBattleScreenState({
 }: Params) {
   const isSelfSecond = state.firstPlayer === 'opponent';
 
-  const setupRequired = useMemo(() => {
-    const selfLeaderReady = state.self.leaders.length === 4;
-    const opponentLeaderReady = state.opponent.leaders.length === 4;
-
-    return !selfLeaderReady || !opponentLeaderReady;
-  }, [state.self.leaders.length, state.opponent.leaders.length]);
+  const setupRequired =
+    !state.roundTacticSelected &&
+    state.self.tacticsDeck.length > 0 &&
+    !state.winner;
 
   const canUndoBattle = battleUndoCount > 0;
+  const pendingChoice = state.pendingChoice;
 
-  const activeLeader = useMemo(
-    () =>
-      state.self.leaders.find((leader) => leader.id === state.activeLeaderId) ??
-      state.self.leaders[0] ??
-      null,
-    [state.activeLeaderId, state.self.leaders],
+  const activeLeader =
+    state.self.leaders.find((leader) => leader.id === state.activeLeaderId) ??
+    state.self.leaders[0];
+
+  const targetLeader =
+    state.opponent.leaders.find((leader) => leader.id === state.targetLeaderId) ??
+    state.opponent.leaders[0];
+
+  const activeLeaderMaxHp = getLeaderMaxHp(activeLeader);
+  const targetLeaderMaxHp = getLeaderMaxHp(targetLeader);
+
+  const activeLeaderRemainingHp = Math.max(
+    activeLeaderMaxHp - (activeLeader?.currentDamage ?? 0),
+    0,
   );
 
-  const targetLeader = useMemo(
-    () =>
-      state.opponent.leaders.find(
-        (leader) => leader.id === state.targetLeaderId,
-      ) ??
-      state.opponent.leaders[0] ??
-      null,
-    [state.opponent.leaders, state.targetLeaderId],
+  const targetLeaderRemainingHp = Math.max(
+    targetLeaderMaxHp - (targetLeader?.currentDamage ?? 0),
+    0,
   );
 
-  const activeLeaderMaxHp = activeLeader ? getLeaderMaxHp(activeLeader) : 0;
-  const targetLeaderMaxHp = targetLeader ? getLeaderMaxHp(targetLeader) : 0;
+  const remainingOpponentLeaders = state.opponent.leaders.filter(
+    (leader) => !leader.isDown,
+  ).length;
 
-  const activeLeaderRemainingHp = activeLeader
-    ? getLeaderRemainingHp(activeLeader)
-    : 0;
-  const targetLeaderRemainingHp = targetLeader
-    ? getLeaderRemainingHp(targetLeader)
-    : 0;
+  const recentBattleHistory = state.battleHistory.slice(0, 30);
 
-  const remainingOpponentLeaders = useMemo(
-    () => state.opponent.leaders.filter((leader) => !leader.isDown).length,
-    [state.opponent.leaders],
-  );
-
-  const recentBattleHistory = useMemo(
-    () => [...state.battleHistory].slice(-8).reverse(),
-    [state.battleHistory],
-  );
-
-  const recentRoundSummaries = useMemo(
+  const roundSummaries = useMemo(
     () => [...state.roundSummaries].reverse(),
     [state.roundSummaries],
   );
 
-  const selectableCards = useMemo(() => {
-    const pendingChoice = state.pendingChoice;
-    if (!pendingChoice) return [];
+  const pendingChoiceSelectableCards = pendingChoice
+    ? state.self.hand.filter((card) =>
+        pendingChoice.selectableHandCardIds.includes(card.id),
+      )
+    : [];
 
-    const selectableIds = new Set(pendingChoice.selectableHandCardIds ?? []);
-
-    return state.self.hand.filter((card) => selectableIds.has(card.id));
-  }, [state.pendingChoice, state.self.hand]);
-
-  const selectableLeaders = useMemo(() => {
-    const pendingChoice = state.pendingChoice;
-    if (!pendingChoice || !needsLeaderSelection(pendingChoice)) return [];
-
-    const selectableIds = new Set(pendingChoice.selectableLeaderIds);
-    return [...state.self.leaders, ...state.opponent.leaders].filter((leader) =>
-      selectableIds.has(leader.id),
-    );
-  }, [state.pendingChoice, state.self.leaders, state.opponent.leaders]);
-
-  const requiresCardSelection = needsCardSelection(state.pendingChoice);
-  const requiresLeaderSelection = needsLeaderSelection(state.pendingChoice);
-
-  const cardCatalogMap = useMemo(
-    () =>
-      Object.fromEntries(cardCatalog.map((card) => [card.id, card])),
+  const cardCatalogById = useMemo(
+    () => new Map(cardCatalog.map((card) => [card.id, card])),
     [cardCatalog],
   );
 
-  const latestLogMessage = state.logs.at(-1) ?? '操作を選択してください';
+  const pendingChoiceSelectableLeaders =
+    pendingChoice?.kind === 'post_attack_other_leader_damage' ||
+    pendingChoice?.kind === 'drain_rod_damage_target'
+      ? state.opponent.leaders.filter((leader) =>
+          pendingChoice.selectableLeaderIds.includes(leader.id),
+        )
+      : pendingChoice?.kind === 'drain_rod_heal_distribution'
+        ? state.self.leaders.filter((leader) =>
+            pendingChoice.selectableLeaderIds.includes(leader.id),
+          )
+        : [];
 
-  const logStatusText = useMemo(() => {
-    if (state.winner) {
-      return state.winner === 'self' ? '勝利' : '敗北';
-    }
-    if (state.pendingChoice) {
-      return '選択待ち';
-    }
-    if (setupRequired) {
-      return '準備不足';
-    }
-    return '進行中';
-  }, [state.pendingChoice, state.winner, setupRequired]);
+  const pendingChoiceNeedsCardSelection = Boolean(
+    pendingChoice &&
+      pendingChoice.kind !== 'optional_trash_topdeck_for_next_attack_buff' &&
+      !needsLeaderSelection(pendingChoice),
+  );
+
+  const pendingChoiceNeedsLeaderSelection = needsLeaderSelection(pendingChoice);
 
   const nextActionHints = useMemo(() => {
     const hints: string[] = [];
@@ -152,75 +99,79 @@ export default function useBattleScreenState({
     if (state.winner) {
       hints.push(
         state.winner === 'self'
-          ? '対戦は終了しました。勝利結果を確認してください。'
-          : '対戦は終了しました。敗北結果を確認してください。',
+          ? '対戦終了：自分側の勝利です。'
+          : '対戦終了：相手側の勝利です。',
       );
+      if (canUndoBattle) {
+        hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
+      }
       return hints;
     }
 
-    if (state.pendingChoice) {
-      hints.push(state.pendingChoice.prompt);
+    if (pendingChoice) {
+      hints.push(`${pendingChoice.sourceCardName} の処理を選択してください。`);
+      return hints;
     }
 
     if (setupRequired) {
-      hints.push('対戦前に自分側・相手側の4リーダー設定を確認してください。');
-    }
-
-    if (!state.roundTacticSelected) {
-      hints.push('このラウンドのタクティクスをセットしてください。');
+      hints.push(
+        `ラウンド開始前にタクティクスをセットしてください（残り ${state.self.tacticsDeck.length} 枚）。`,
+      );
     }
 
     if (state.pendingDiscardCount > 0) {
       hints.push(`手札をあと ${state.pendingDiscardCount} 枚捨ててください。`);
     }
 
+    if (!setupRequired && state.pendingDiscardCount === 0) {
+      if (state.ppCurrent <= 0) {
+        hints.push('PP が足りません。ターン終了または軽い行動を検討してください。');
+      } else if (state.self.hand.length > 0) {
+        hints.push(
+          `手札 ${state.self.hand.length} 枚。PP ${state.ppCurrent} を使って行動できます。`,
+        );
+      } else {
+        hints.push('手札がありません。ターン終了を検討してください。');
+      }
+    }
+
     if (
       !state.tacticsUsedThisTurn &&
       state.self.tacticsSet.length > 0 &&
-      !state.pendingChoice
+      !setupRequired
     ) {
-      hints.push('セット済みタクティクスを使用できます。');
+      hints.push(
+        `セット済みタクティクスが ${state.self.tacticsSet.length} 枚あります。1枚使用できます。`,
+      );
     }
 
-    if (state.ppCurrent <= 0) {
-      hints.push('PP が足りません。ターン終了または軽い行動を検討してください。');
+    if (remainingOpponentLeaders === 1) {
+      hints.push('相手リーダーは残り1体です。');
     }
 
-    if (remainingOpponentLeaders <= 1) {
-      hints.push('相手リーダーは残りわずかです。フィニッシュを狙えます。');
-    }
-
-    if (
-      isSelfSecond &&
-      state.turn <= 1 &&
-      state.self.ppTicket &&
-      !state.pendingChoice
-    ) {
-      hints.push('後攻なので PP チケットの使いどころを確認してください。');
+    if (state.self.ppTicket && state.round === 1) {
+      hints.push('PPチケットを使える状況です。');
     }
 
     if (canUndoBattle) {
-      hints.push('直前の操作はやり直しできます。');
-    }
-
-    if (!hints.length) {
-      hints.push('アクティブリーダーと対象リーダーを確認して行動してください。');
+      hints.push(`直前の操作を取り消せます（${battleUndoCount} 件）。`);
     }
 
     return hints.slice(0, 3);
   }, [
+    battleUndoCount,
     canUndoBattle,
-    isSelfSecond,
+    pendingChoice,
     remainingOpponentLeaders,
     setupRequired,
-    state.pendingChoice,
     state.pendingDiscardCount,
     state.ppCurrent,
-    state.roundTacticSelected,
+    state.round,
+    state.self.hand.length,
     state.self.ppTicket,
+    state.self.tacticsDeck.length,
     state.self.tacticsSet.length,
     state.tacticsUsedThisTurn,
-    state.turn,
     state.winner,
   ]);
 
@@ -228,6 +179,7 @@ export default function useBattleScreenState({
     isSelfSecond,
     setupRequired,
     canUndoBattle,
+    pendingChoice,
     activeLeader,
     targetLeader,
     activeLeaderMaxHp,
@@ -236,15 +188,30 @@ export default function useBattleScreenState({
     targetLeaderRemainingHp,
     remainingOpponentLeaders,
     recentBattleHistory,
-    recentRoundSummaries,
-    selectableCards,
-    selectableLeaders,
-    requiresCardSelection,
-    requiresLeaderSelection,
+    roundSummaries,
+    pendingChoiceSelectableCards,
+    cardCatalogById,
+    pendingChoiceSelectableLeaders,
+    pendingChoiceNeedsCardSelection,
+    pendingChoiceNeedsLeaderSelection,
     nextActionHints,
-    cardCatalogMap,
-    latestLogMessage,
-    logStatusText,
+
+    // 追加 alias（将来 BattleScreen 側を更新するとき用）
+    recentRoundSummaries: roundSummaries,
+    selectableCards: pendingChoiceSelectableCards,
+    selectableLeaders: pendingChoiceSelectableLeaders,
+    requiresCardSelection: pendingChoiceNeedsCardSelection,
+    requiresLeaderSelection: pendingChoiceNeedsLeaderSelection,
+    cardCatalogMap: Object.fromEntries(cardCatalog.map((card) => [card.id, card])),
+    latestLogMessage: state.logs.at(-1) ?? '操作を選択してください。',
+    logStatusText: state.winner
+      ? state.winner === 'self'
+        ? '勝利'
+        : '敗北'
+      : pendingChoice
+        ? '選択待ち'
+        : setupRequired
+          ? '準備中'
+          : '進行中',
   };
 }
-

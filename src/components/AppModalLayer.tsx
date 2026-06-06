@@ -5,7 +5,11 @@ import QuickGuideModal from './QuickGuideModal';
 import type { Card, Leader, PendingBattleChoice, RegisteredCard } from '../types/game';
 import type { ConfirmTone, ModalAction } from '../hooks/useModalLayerState';
 
-type ResolvePendingChoice = (payload: { accept: boolean; selectedCardId?: string; selectedLeaderId?: string }) => void;
+type ResolvePendingChoice = (payload: {
+  accept: boolean;
+  selectedCardId?: string;
+  selectedLeaderId?: string;
+}) => void;
 
 type Props = {
   isGuideOpen: boolean;
@@ -68,6 +72,16 @@ export default function AppModalLayer({
   cancelPendingChoice,
   cardCatalogById,
 }: Props) {
+  const isPreviewOpen = selectedCard !== null;
+  const isPendingChoiceOpen = Boolean(pendingChoice);
+  const hasAnyModalOpen =
+    isGuideOpen ||
+    isPreviewOpen ||
+    confirmOpen ||
+    isPendingChoiceOpen;
+
+  if (!hasAnyModalOpen) return null;
+
   return (
     <>
       <QuickGuideModal

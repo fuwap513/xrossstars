@@ -32,9 +32,13 @@ export const buildHeaderProps = (
   ...props,
 });
 
-export const buildTopPanelsProps = (props: AppTopPanelsProps): AppTopPanelsProps => props;
+export const buildTopPanelsProps = (
+  props: AppTopPanelsProps,
+): AppTopPanelsProps => props;
 
-export const buildDeckEditorProps = (props: DeckEditorProps): DeckEditorProps => props;
+export const buildDeckEditorProps = (
+  props: DeckEditorProps,
+): DeckEditorProps => props;
 
 export const buildLeaderSetupEditorProps = (
   props: LeaderSetupEditorProps,

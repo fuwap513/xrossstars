@@ -8,29 +8,48 @@ type Props = {
   cardLookup?: Map<string, Card>;
 };
 
-const getCurrentAtk = (leader: Leader) => leader.baseAtk + (leader.awakened ? 10 : 0);
-const getCurrentHp = (leader: Leader) => leader.baseHp + (leader.awakened ? 30 : 0);
+const getAwakenedAtk = (leader: Leader) => leader.baseAtk + 10;
+const getAwakenedHp = (leader: Leader) => leader.baseHp + 30;
+const getCurrentAtk = (leader: Leader) => (leader.awakened ? getAwakenedAtk(leader) : leader.baseAtk);
+const getCurrentHp = (leader: Leader) => (leader.awakened ? getAwakenedHp(leader) : leader.baseHp);
 
-export default function LeaderRow({ title, leaders, selectedId, onSelect, cardLookup }: Props) {
+export default function LeaderRow({
+  title,
+  leaders,
+  selectedId,
+  onSelect,
+  cardLookup,
+}: Props) {
   return (
     <section className="panel">
       <div className="section-header">
         <h2>{title}</h2>
         <span>{leaders.length}体</span>
       </div>
+
       <div className="leader-grid">
         {leaders.map((leader) => {
           const currentHp = getCurrentHp(leader);
           const currentAtk = getCurrentAtk(leader);
           const remainingHp = Math.max(currentHp - leader.currentDamage, 0);
           const isSelected = selectedId === leader.id;
-          const leaderCard = leader.sourceCardId ? cardLookup?.get(leader.sourceCardId) : undefined;
-          const imageStatusLabel = leaderCard?.officialImageUrl ? '公式イラスト' : '画像未設定';
+          const leaderCard = leader.sourceCardId
+            ? cardLookup?.get(leader.sourceCardId)
+            : undefined;
+          const imageStatusLabel = leaderCard?.officialImageUrl
+            ? '公式イラスト'
+            : '画像未設定';
 
           return (
             <button
               type="button"
-              className={`leader-card ${isSelected ? 'selected' : ''} ${leader.isDown ? 'state-down' : leader.awakened ? 'state-awakened' : 'state-normal'}`}
+              className={`leader-card ${isSelected ? 'selected' : ''} ${
+                leader.isDown
+                  ? 'state-down'
+                  : leader.awakened
+                    ? 'state-awakened'
+                    : 'state-normal'
+              }`}
               key={leader.id}
               onClick={() => onSelect?.(leader.id)}
             >
@@ -49,27 +68,54 @@ export default function LeaderRow({ title, leaders, selectedId, onSelect, cardLo
                     <span>{imageStatusLabel}</span>
                   </div>
                 )}
+
                 <div className="leader-overlay-row">
-                  <span className={`leader-status-chip ${leaderCard?.officialImageUrl ? 'leader-status-chip-ready' : 'leader-status-chip-muted'}`}>
+                  <span
+                    className={`leader-status-chip ${
+                      leaderCard?.officialImageUrl
+                        ? 'leader-status-chip-ready'
+                        : 'leader-status-chip-muted'
+                    }`}
+                  >
                     {imageStatusLabel}
                   </span>
-                  {leaderCard?.officialCardNumber && <span className="leader-status-chip">{leaderCard.officialCardNumber}</span>}
+                  {leaderCard?.officialCardNumber && (
+                    <span className="leader-status-chip">
+                      {leaderCard.officialCardNumber}
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="leader-body">
                 <div className="leader-name-row">
                   <div className="leader-name">{leader.name}</div>
-                  <div className="leader-badge">{leader.isDown ? 'DOWN' : leader.awakened ? '覚醒' : '通常'}</div>
+                  <div className="leader-badge">
+                    {leader.isDown ? 'DOWN' : leader.awakened ? '覚醒' : '通常'}
+                  </div>
                 </div>
+
                 <div className="leader-chip-row">
-                  <span className="detail-chip">ATK {currentAtk}</span>
-                  <span className="detail-chip">HP {remainingHp}/{currentHp}</span>
+                  <span className="detail-chip">現在 ATK {currentAtk}</span>
+                  <span className="detail-chip">現在 HP {remainingHp}/{currentHp}</span>
                   {leader.color && <span className="detail-chip">{leader.color}</span>}
                 </div>
-                <div className="leader-stats">基礎 ATK {leader.baseAtk} / HP {leader.baseHp}</div>
-                <div className="leader-awaken">現在ダメージ {leader.currentDamage} / 残りHP {remainingHp}</div>
-                {leader.effectText && <div className="leader-damage">{leader.effectText}</div>}
+
+                <div className="leader-meta-lines">
+                  <div className="leader-meta-line">
+                    通常 ATK {leader.baseAtk} / HP {leader.baseHp}
+                  </div>
+                  <div className="leader-meta-line">
+                    覚醒 ATK {getAwakenedAtk(leader)} / HP {getAwakenedHp(leader)}
+                  </div>
+                  <div className="leader-meta-line">
+                    ダメージ {leader.currentDamage} / 残りHP {remainingHp}
+                  </div>
+                </div>
+
+                {leader.effectText && (
+                  <div className="leader-damage">{leader.effectText}</div>
+                )}
               </div>
             </button>
           );
@@ -78,3 +124,4 @@ export default function LeaderRow({ title, leaders, selectedId, onSelect, cardLo
     </section>
   );
 }
+

@@ -285,7 +285,8 @@ export default function BattleScreen({
             <div className="detail-box">
               <div className="eyebrow">攻撃補正</div>
               <div className="detail-description">
-                次攻撃 +{state.nextAttackBuff} / ターン +{state.turnAttackBuff} / ラウンド +{state.roundAttackBuff}
+                次攻撃 +{state.nextAttackBuff} / ターン +{state.turnAttackBuff} / ラウンド +
+                {state.roundAttackBuff}
               </div>
             </div>
 
@@ -402,7 +403,6 @@ export default function BattleScreen({
             )}
           </div>
         </section>
-
         <section className="panel top-gap">
           <div className="section-header">
             <h2>手札</h2>
@@ -560,7 +560,8 @@ export default function BattleScreen({
                     相手DOWN {summary.opponentLeadersDown}
                   </div>
                   <div className="detail-description">
-                    手札 {summary.handCount} / 山札 {summary.deckCount} / トラッシュ {summary.trashCount}
+                    手札 {summary.handCount} / 山札 {summary.deckCount} / トラッシュ{' '}
+                    {summary.trashCount}
                   </div>
                   <div className="detail-description">{summary.note}</div>
                 </div>
@@ -603,4 +604,3 @@ export default function BattleScreen({
     </div>
   );
 }
-

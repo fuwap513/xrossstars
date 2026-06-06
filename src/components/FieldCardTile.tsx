@@ -27,9 +27,23 @@ function getImageStatusLabel(card: Card) {
   return '画像未設定';
 }
 
-export default function FieldCardTile({ card, title, subtitle, accent = 'default', selected = false, actionLabel, actionTone = 'default', onClick, onAction }: Props) {
+export default function FieldCardTile({
+  card,
+  title,
+  subtitle,
+  accent = 'default',
+  selected = false,
+  actionLabel,
+  actionTone = 'default',
+  onClick,
+  onAction,
+}: Props) {
   return (
-    <article className={`field-card field-card-${accent} ${selected ? 'field-card-selected' : ''}`}>
+    <article
+      className={`field-card field-card-${accent} ${
+        selected ? 'field-card-selected' : ''
+      }`}
+    >
       <button className="field-card-button" type="button" onClick={onClick}>
         <div className="field-card-art-shell">
           {card.officialImageUrl ? (
@@ -46,33 +60,62 @@ export default function FieldCardTile({ card, title, subtitle, accent = 'default
               <span>{getImageStatusLabel(card)}</span>
             </div>
           )}
+
           <div className="field-card-overlay-row">
-            <span className={`field-card-status-chip ${card.officialImageUrl ? 'field-card-status-chip-ready' : 'field-card-status-chip-muted'}`}>
+            <span
+              className={`field-card-status-chip ${
+                card.officialImageUrl
+                  ? 'field-card-status-chip-ready'
+                  : 'field-card-status-chip-muted'
+              }`}
+            >
               {getImageStatusLabel(card)}
             </span>
-            {card.officialCardNumber && <span className="field-card-status-chip">{card.officialCardNumber}</span>}
+
+            {card.officialCardNumber && (
+              <span className="field-card-status-chip">
+                {card.officialCardNumber}
+              </span>
+            )}
           </div>
         </div>
 
         <div className="field-card-body">
           {title && <div className="field-card-title">{title}</div>}
+
           <div className="hand-card-chip-row">
             <span className="detail-chip">{card.type.toUpperCase()}</span>
             <span className="detail-chip">Cost {card.cost}</span>
-            <span className="detail-chip">{effectLabelMap[card.effectType]}</span>
+            <span className="detail-chip">
+              {effectLabelMap[card.effectType]}
+            </span>
+            {card.color && <span className="detail-chip">{card.color}</span>}
           </div>
+
           <strong className="field-card-name">{card.name}</strong>
+
           {subtitle && <div className="field-card-subtitle">{subtitle}</div>}
+
           <div className="field-card-meta-row">
-            <span>{typeof card.power === 'number' ? `Power ${card.power}` : `Effect ${card.effectValue}`}</span>
+            <span>
+              {typeof card.power === 'number'
+                ? `Power ${card.power}`
+                : `Effect ${card.effectValue}`}
+            </span>
             {card.officialSet && <span>{card.officialSet}</span>}
           </div>
+
           <p className="field-card-text">{card.text}</p>
         </div>
       </button>
+
       {onAction && actionLabel && (
         <button
-          className={`field-card-action-button ${actionTone === 'warning' ? 'field-card-action-button-warning' : ''}`}
+          className={`field-card-action-button ${
+            actionTone === 'warning'
+              ? 'field-card-action-button-warning'
+              : ''
+          }`}
           type="button"
           onClick={onAction}
         >
@@ -82,3 +125,4 @@ export default function FieldCardTile({ card, title, subtitle, accent = 'default
     </article>
   );
 }
+

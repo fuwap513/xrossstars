@@ -102,6 +102,7 @@ export const createLeaderFromCatalog = (
   };
 };
 
+
 export const drawCards = (board: PlayerBoard, count: number, state: MatchState, deps: Pick<RuntimeDeps, 'log'>) => {
   for (let drawIndex = 0; drawIndex < count; drawIndex += 1) {
     if (board.mainDeck.length === 0) {
